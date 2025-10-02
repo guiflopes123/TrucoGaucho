@@ -424,4 +424,39 @@ describe('TrucoGame', () => {
       assert.strictEqual(game.players[game.currentTurn].id, 'player1');
     });
   });
+
+  describe('Betting Flow', () => {
+    it('deve lidar corretamente com a sequência de truco -> retruco -> vale 4', () => {
+      const newGame = new TrucoGame('room1', 2);
+      newGame.addPlayer('player1', 'Jogador 1');
+      newGame.addPlayer('player2', 'Jogador 2');
+      newGame.setPlayerReady('player1');
+      newGame.setPlayerReady('player2');
+
+      // Player 1 pede truco
+      let trucoResult = newGame.requestTruco('player1');
+      assert.strictEqual(trucoResult.success, true, 'Falha ao pedir truco');
+      assert.strictEqual(newGame.trucoState.level, 'truco');
+      assert.strictEqual(newGame.trucoState.respondingTeam, 2, 'O time respondente do truco está incorreto');
+
+      // Player 2 pede retruco
+      let retrucoResult = newGame.requestRetruco('player2');
+      assert.strictEqual(retrucoResult.success, true, 'Falha ao pedir retruco');
+      assert.strictEqual(newGame.retrucoState.level, 'retruco');
+      assert.strictEqual(newGame.trucoState, null, 'O estado do truco não foi limpo');
+      assert.strictEqual(newGame.retrucoState.respondingTeam, 1, 'O time respondente do retruco está incorreto');
+
+      // Player 1 pede vale 4
+      let vale4Result = newGame.requestVale4('player1');
+      assert.strictEqual(vale4Result.success, true, 'Falha ao pedir vale 4');
+      assert.strictEqual(newGame.vale4State.level, 'vale4');
+      assert.strictEqual(newGame.retrucoState, null, 'O estado do retruco não foi limpo');
+      assert.strictEqual(newGame.vale4State.respondingTeam, 2, 'O time respondente do vale 4 está incorreto');
+
+      // Player 2 aceita vale 4
+      let responseResult = newGame.respondToVale4('player2', true);
+      assert.strictEqual(responseResult.success, true, 'Falha ao responder ao vale 4');
+      assert.strictEqual(newGame.handValue, 4, 'O valor da mão deveria ser 4');
+    });
+  });
 });

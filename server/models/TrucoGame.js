@@ -623,26 +623,20 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    // Encontrar o próximo jogador
-    const currentIndex = this.players.findIndex(p => p.id === playerId);
-    const nextIndex = (currentIndex + 1) % this.players.length;
-    const nextPlayer = this.players[nextIndex];
-    
-    console.log(`[Truco] Próximo jogador para responder: ${nextPlayer.id}`);
-    
-    // Configurar estado do Truco
+    const respondingTeamId = player.team === 1 ? 2 : 1;
+    console.log(`[Truco] Time respondente: ${respondingTeamId}`);
+
     this.trucoState = {
       level: 'truco',
       value: 2,
       team: player.team,
       requestedBy: playerId,
-      respondingPlayer: nextPlayer.id,
+      respondingTeam: respondingTeamId,
       accepted: false
     };
-    
-    return { 
+
+    return {
       success: true,
-      nextPlayer: nextPlayer.id,
       trucoState: this.trucoState
     };
   }
@@ -666,9 +660,9 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.id !== this.trucoState.respondingPlayer) {
-      console.log('[Truco] Erro: Não é a vez do jogador responder');
-      return { success: false, message: 'Não é a vez do jogador responder' };
+    if (player.team !== this.trucoState.respondingTeam) {
+      console.log('[Truco] Erro: Não é a vez do seu time responder');
+      return { success: false, message: 'Não é a vez do seu time responder' };
     }
 
     if (accept) {
@@ -1164,35 +1158,31 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.isCurrentPlayer) {
-      console.log(`[Retruco] Jogador ${playerId} pode pedir Retruco`);
-      
-      // Encontrar o próximo jogador
-      const currentIndex = this.players.findIndex(p => p.id === playerId);
-      const nextIndex = (currentIndex + 1) % this.players.length;
-      const nextPlayer = this.players[nextIndex];
-      
-      console.log(`[Retruco] Próximo jogador para responder: ${nextPlayer.id}`);
-      
-      // Configurar estado do Retruco
-      this.retrucoState = {
-        level: 'retruco',
-        value: 3,
-        team: player.team,
-        requestedBy: playerId,
-        respondingPlayer: nextPlayer.id,
-        accepted: false
-      };
-      
-      return { 
-        success: true,
-        nextPlayer: nextPlayer.id,
-        retrucoState: this.retrucoState
-      };
+    if (!this.trucoState || player.team !== this.trucoState.respondingTeam) {
+      console.log('[Retruco] Erro: O jogador não pode pedir retruco agora.');
+      return { success: false, message: 'Você não pode pedir Retruco agora.' };
     }
 
-    console.log('[Retruco] Erro: Não é a vez do jogador');
-    return { success: false, message: 'Não é a vez do jogador' };
+    console.log(`[Retruco] Jogador ${playerId} pode pedir Retruco`);
+      
+    const respondingTeamId = this.trucoState.team;
+
+    console.log(`[Retruco] Time respondente: ${respondingTeamId}`);
+      
+    this.trucoState = null;
+    this.retrucoState = {
+      level: 'retruco',
+      value: 3,
+      team: player.team,
+      requestedBy: playerId,
+      respondingTeam: respondingTeamId,
+      accepted: false
+    };
+      
+    return {
+      success: true,
+      retrucoState: this.retrucoState
+    };
   }
 
   respondToRetruco(playerId, accept) {
@@ -1214,9 +1204,9 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.id !== this.retrucoState.respondingPlayer) {
-      console.log('[Retruco] Erro: Não é a vez do jogador responder');
-      return { success: false, message: 'Não é a vez do jogador responder' };
+    if (player.team !== this.retrucoState.respondingTeam) {
+      console.log('[Retruco] Erro: Não é a vez do seu time responder');
+      return { success: false, message: 'Não é a vez do seu time responder' };
     }
 
     if (accept) {
@@ -1274,55 +1264,31 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    // Verificar se o jogador é quem recebeu o Retruco
-    if (!this.retrucoState || this.retrucoState.respondingPlayer !== playerId) {
-      console.log('[Vale 4] Erro: Apenas o jogador que recebeu o Retruco pode pedir Vale 4');
-      return { success: false, message: 'Apenas o jogador que recebeu o Retruco pode pedir Vale 4' };
+    if (!this.retrucoState || player.team !== this.retrucoState.respondingTeam) {
+      console.log('[Vale 4] Erro: O jogador não pode pedir Vale 4 agora.');
+      return { success: false, message: 'Você não pode pedir Vale 4 agora.' };
     }
 
-    if (player.isCurrentPlayer) {
-      console.log(`[Vale 4] Jogador ${playerId} pode pedir Vale 4`);
+    console.log(`[Vale 4] Jogador ${playerId} pode pedir Vale 4`);
       
-      // Encontrar o próximo jogador
-      const currentIndex = this.players.findIndex(p => p.id === playerId);
-      const nextIndex = (currentIndex + 1) % this.players.length;
-      const nextPlayer = this.players[nextIndex];
+    const respondingTeamId = this.retrucoState.team;
       
-      console.log(`[Vale 4] Próximo jogador para responder: ${nextPlayer.id}`);
+    console.log(`[Vale 4] Time respondente: ${respondingTeamId}`);
       
-      // Configurar estado do Vale 4
-      this.vale4State = {
-        level: 'vale4',
-        value: 4,
-        team: player.team,
-        requestedBy: playerId,
-        respondingPlayer: nextPlayer.id,
-        accepted: false
-      };
+    this.retrucoState = null;
+    this.vale4State = {
+      level: 'vale4',
+      value: 4,
+      team: player.team,
+      requestedBy: playerId,
+      respondingTeam: respondingTeamId,
+      accepted: false
+    };
 
-      // Limpar o estado do Retruco já que agora temos Vale 4
-      this.retrucoState = null;
-      
-      // Não alterar o jogador atual, pois a vez deve permanecer com quem pediu o Vale 4
-      console.log(`[Vale 4] Mantendo a vez com o jogador ${playerId}`);
-      console.log('[Vale 4] Estado atualizado:', {
-        vale4State: this.vale4State,
-        retrucoState: this.retrucoState,
-        currentPlayer: playerId
-      });
-      
-      return { 
-        success: true,
-        playerId: playerId,
-        nextPlayer: nextPlayer.id,
-        vale4State: this.vale4State,
-        currentPlayer: playerId, // Manter a vez com quem pediu o Vale 4
-        gameState: this.getGameState()
-      };
-    }
-
-    console.log('[Vale 4] Erro: Não é a vez do jogador');
-    return { success: false, message: 'Não é a vez do jogador' };
+    return {
+      success: true,
+      vale4State: this.vale4State,
+    };
   }
 
   respondToVale4(playerId, accept) {
@@ -1344,9 +1310,9 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.id !== this.vale4State.respondingPlayer) {
-      console.log('[Vale 4] Erro: Não é a vez do jogador responder');
-      return { success: false, message: 'Não é a vez do jogador responder' };
+    if (player.team !== this.vale4State.respondingTeam) {
+      console.log('[Vale 4] Erro: Não é a vez do seu time responder');
+      return { success: false, message: 'Não é a vez do seu time responder' };
     }
 
     if (accept) {
