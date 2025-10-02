@@ -798,7 +798,8 @@ class TrucoGame {
     }
     
     const player = this.players[playerIndex];
-    
+    const wasCurrentTurn = playerIndex === this.currentTurn;
+
     // Remover o jogador da lista de jogadores
     this.players.splice(playerIndex, 1);
     
@@ -816,9 +817,20 @@ class TrucoGame {
       return { success: true, roomEmpty: true };
     }
     
-    // Se o jogo estava em andamento, finalizar
+    // Se o jogo estava em andamento, ajustar o turno e potencialmente finalizar
     if (this.gameStatus === 'playing') {
-      this.gameStatus = 'waiting';
+      if (playerIndex < this.currentTurn) {
+        this.currentTurn--;
+      } else if (wasCurrentTurn) {
+        if (this.currentTurn >= this.players.length) {
+          this.currentTurn = 0;
+        }
+      }
+
+      // Se não houver jogadores suficientes, o jogo é interrompido
+      if (this.players.length < 2) {
+        this.gameStatus = 'waiting';
+      }
     }
     
     // Atualizar o estado do jogo após remover o jogador
@@ -852,72 +864,52 @@ class TrucoGame {
       console.log('Time vencedor:', winningTeam.id);
       console.log('Valor da mão:', this.handValue);
       
-    // Adicionar pontos ao time vencedor
-    winningTeam.addPoints(this.handValue);
+      winningTeam.addPoints(this.handValue);
       console.log('Pontuação após adicionar pontos:', winningTeam.score);
     
-    // Verificar se o time atingiu a pontuação alvo
-    if (winningTeam.score >= this.targetScore) {
+      if (winningTeam.score >= this.targetScore) {
         console.log('Time atingiu a pontuação alvo, finalizando o jogo');
-      this.gameWinner = winningTeam;
-      this.gameStatus = 'finished';
+        this.gameWinner = winningTeam;
+        this.gameStatus = 'finished';
         this.status = 'finished';
       }
     } else {
       console.log('Empate na mão - nenhum time recebe pontos');
     }
     
+    if (this.gameStatus === 'finished') {
+      return this.getGameState();
+    }
+
     console.log('Preparando para a próxima mão');
     
-    // Aguardar 3 segundos antes de limpar a mesa e preparar para a próxima mão
     setTimeout(() => {
-      // Preparar para a próxima mão
+      if (this.gameStatus === 'finished') return;
+
       this.currentRound = 1;
       this.handValue = 1;
       this.trucoState = null;
       this.envidoState = null;
       this.florState = null;
-      this.playedCards = []; // Limpar as cartas da mesa
+      this.playedCards = [];
       
-      // Resetar as vitórias de rodada e os registros de empate
-      this.teams.forEach(team => {
-        team.resetRoundWins();
-        console.log(`Time ${team.id}: ${team.roundsWon} rodadas vencidas após reset`);
-      });
+      this.teams.forEach(team => team.resetRoundWins());
       
-      // Resetar os registros de empate e vencedores
       this.roundTies = [];
       this.roundWinners = [];
       
-      // Distribuir novas cartas
       this.dealCards();
       
-      // Alternar o jogador inicial da mão
       this.currentTurn = (this.currentTurn + 1) % this.players.length;
       
-      for (let i = 0; i < this.players.length; i++) {
-        this.players[i].isCurrentPlayer = (i === this.currentTurn);
-      }
+      this.players.forEach((p, i) => {
+        p.isCurrentPlayer = (i === this.currentTurn);
+      });
       
-      // Enviar o estado atualizado após limpar a mesa
-      const updatedState = this.getGameState();
-      return updatedState;
+      this.updateGameState();
     }, 3000);
     
-    // Atualizar o estado do jogo
-    const gameState = this.getGameState();
-    console.log('Estado do jogo após finalizar a mão:', {
-      status: gameState.status,
-      teams: gameState.teams.map(team => ({
-        id: team.id,
-        score: team.score,
-        roundsWon: team.roundsWon
-      }))
-    });
-    
-    console.log('=== FIM DA FINALIZAÇÃO DA MÃO ===\n');
-    
-    return gameState;
+    return this.getGameState();
   }
   
   // Método para obter o estado do jogo para enviar ao cliente
