@@ -437,18 +437,21 @@ describe('TrucoGame', () => {
       let trucoResult = newGame.requestTruco('player1');
       assert.strictEqual(trucoResult.success, true, 'Falha ao pedir truco');
       assert.strictEqual(newGame.trucoState.level, 'truco');
+      assert.strictEqual(newGame.trucoState.respondingTeam, 2, 'O time respondente do truco está incorreto');
 
       // Player 2 pede retruco
       let retrucoResult = newGame.requestRetruco('player2');
       assert.strictEqual(retrucoResult.success, true, 'Falha ao pedir retruco');
       assert.strictEqual(newGame.retrucoState.level, 'retruco');
       assert.strictEqual(newGame.trucoState, null, 'O estado do truco não foi limpo');
+      assert.strictEqual(newGame.retrucoState.respondingTeam, 1, 'O time respondente do retruco está incorreto');
 
       // Player 1 pede vale 4
       let vale4Result = newGame.requestVale4('player1');
       assert.strictEqual(vale4Result.success, true, 'Falha ao pedir vale 4');
       assert.strictEqual(newGame.vale4State.level, 'vale4');
       assert.strictEqual(newGame.retrucoState, null, 'O estado do retruco não foi limpo');
+      assert.strictEqual(newGame.vale4State.respondingTeam, 2, 'O time respondente do vale 4 está incorreto');
 
       // Player 2 aceita vale 4
       let responseResult = newGame.respondToVale4('player2', true);

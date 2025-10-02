@@ -151,7 +151,14 @@ const requestTruco = (roomId, playerId) => {
   }
   
   // Pedir Truco no jogo
-  return room.game.requestTruco(playerId);
+  const result = room.game.requestTruco(playerId);
+
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
+  return result;
 };
 
 // Pedir Retruco
@@ -164,7 +171,14 @@ const requestRetruco = (roomId, playerId) => {
   }
   
   // Pedir Retruco no jogo
-  return room.game.requestRetruco(playerId);
+  const result = room.game.requestRetruco(playerId);
+
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
+  return result;
 };
 
 // Pedir Vale 4
@@ -177,7 +191,14 @@ const requestVale4 = (roomId, playerId) => {
   }
   
   // Pedir Vale 4 no jogo
-  return room.game.requestVale4(playerId);
+  const result = room.game.requestVale4(playerId);
+
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
+  return result;
 };
 
 // Responder ao Truco
