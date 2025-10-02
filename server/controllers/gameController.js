@@ -156,6 +156,10 @@ const requestTruco = (roomId, playerId) => {
   if (result.success) {
     const io = ioModule.getIO();
     io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    io.to(roomId).emit('truco_requested', {
+        playerId: playerId,
+        trucoState: result.trucoState
+      });
   }
 
   return result;
@@ -176,6 +180,10 @@ const requestRetruco = (roomId, playerId) => {
   if (result.success) {
     const io = ioModule.getIO();
     io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    io.to(roomId).emit('retruco_requested', {
+        playerId: playerId,
+        retrucoState: result.retrucoState
+      });
   }
 
   return result;
@@ -196,6 +204,10 @@ const requestVale4 = (roomId, playerId) => {
   if (result.success) {
     const io = ioModule.getIO();
     io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    io.to(roomId).emit('vale4_requested', {
+        playerId: playerId,
+        vale4State: result.vale4State
+      });
   }
 
   return result;
