@@ -192,6 +192,11 @@ const respondToTruco = (roomId, playerId, accept) => {
   // Responder ao Truco no jogo
   const result = room.game.respondToTruco(playerId, accept);
   
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
   // Verificar se o jogo terminou
   if (room.game.gameStatus === 'finished') {
     room.status = 'finished';
@@ -212,6 +217,11 @@ const respondToRetruco = (roomId, playerId, accept) => {
   // Responder ao Retruco no jogo
   const result = room.game.respondToRetruco(playerId, accept);
   
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
   // Verificar se o jogo terminou
   if (room.game.gameStatus === 'finished') {
     room.status = 'finished';
@@ -232,6 +242,11 @@ const respondToVale4 = (roomId, playerId, accept) => {
   // Responder ao Vale 4 no jogo
   const result = room.game.respondToVale4(playerId, accept);
   
+  if (result.success) {
+    const io = ioModule.getIO();
+    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  }
+
   // Verificar se o jogo terminou
   if (room.game.gameStatus === 'finished') {
     room.status = 'finished';
