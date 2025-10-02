@@ -919,13 +919,11 @@ const GameRoom = () => {
       !gameState?.vale4State &&
       isCurrentPlayer;
     
-    const canPlayRetruco = gameState?.gameStatus === 'playing' && 
-      gameState?.trucoState?.accepted && // Verifica se está em estado de Truco aceito
-      !gameState?.retrucoState && 
+    const canPlayRetruco = gameState?.gameStatus === 'playing' &&
+      gameState?.trucoState?.accepted &&
+      !gameState?.retrucoState &&
       !gameState?.vale4State &&
-      currentTeam !== trucoRequesterTeam && // Verifica se NÃO é do mesmo time que pediu o Truco
-      isCurrentPlayer && // Verifica se é a vez do jogador
-      isNewRoundAfterTruco; // Verifica se é uma nova rodada após o Truco
+      currentTeam !== trucoRequesterTeam;
 
     console.log('=== CONDIÇÕES DO BOTÃO RETRUCO ===');
     console.log('1. Jogo em andamento:', gameState?.gameStatus === 'playing');
@@ -942,12 +940,10 @@ const GameRoom = () => {
     console.log('12. Botão habilitado:', canPlayRetruco);
     console.log('=== FIM DAS CONDIÇÕES ===');
 
-    const canPlayVale4 = gameState?.gameStatus === 'playing' && 
-      gameState?.retrucoState?.accepted && // Verifica se está em estado de Retruco aceito
+    const canPlayVale4 = gameState?.gameStatus === 'playing' &&
+      gameState?.retrucoState?.accepted &&
       !gameState?.vale4State &&
-      currentTeam !== retrucoRequesterTeam && // Verifica se NÃO é do mesmo time que pediu o Retruco
-      isCurrentPlayer && // Verifica se é a vez do jogador
-      isNewRoundAfterRetruco; // Verifica se é uma nova rodada após o Retruco
+      currentTeam !== retrucoRequesterTeam;
 
     console.log('=== CONDIÇÕES DO BOTÃO VALE4 ===');
     console.log('1. Jogo em andamento:', gameState?.gameStatus === 'playing');
