@@ -1089,111 +1089,23 @@ const GameRoom = () => {
   useEffect(() => {
     if (socket) {
       socket.on('truco_requested', (data) => {
-        console.log('=== EVENTO TRUCO_REQUESTED ===');
-        console.log('Dados recebidos:', data);
-        console.log('Estado atual do jogo:', gameState);
-        
-        // Só mostrar o diálogo de resposta se não for o solicitante
-        if (data.playerId !== socket.id) {
-          // Atualiza o estado do jogo apenas com o estado do Truco
-          if (gameState) {
-            setGameState(prev => {
-              console.log('Atualizando estado do jogo para truco_requested');
-              console.log('Estado anterior:', prev);
-              
-              const newState = {
-                ...prev,
-                trucoState: data.trucoState
-              };
-              
-              console.log('Novo estado do jogo:', newState);
-              return newState;
-            });
-          }
-          
-          // Depois mostra o diálogo de resposta
-          setTimeout(() => {
-            console.log('Mostrando diálogo de resposta após 500ms');
-            setShowTrucoIndicator(true);
-            setTrucoRequester(data.playerId);
-            setShowTrucoResponseDialog(true);
-          }, 500);
+        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
+        if (currentPlayer && currentPlayer.team === data.trucoState.respondingTeam) {
+          setShowTrucoResponseDialog(true);
         }
       });
 
       socket.on('retruco_requested', (data) => {
-        console.log('=== EVENTO RETRUCO_REQUESTED ===');
-        console.log('Dados recebidos:', data);
-        console.log('Estado atual do jogo:', gameState);
-        
-        // Só mostrar o diálogo de resposta se não for o solicitante
-        if (data.playerId !== socket.id) {
-          // Atualiza o estado do jogo apenas com o estado do Retruco
-          if (gameState) {
-            setGameState(prev => {
-              console.log('Atualizando estado do jogo para retruco_requested');
-              console.log('Estado anterior:', prev);
-              
-              const newState = {
-                ...prev,
-                trucoState: data.retrucoState,
-                showTruco: true,
-                showTrucoIndicator: true,
-                handValue: 3
-              };
-              
-              console.log('Novo estado do jogo:', newState);
-              return newState;
-            });
-          }
-          
-          // Depois mostra o diálogo de resposta
-          setTimeout(() => {
-            console.log('Mostrando diálogo de resposta após 500ms');
-            setShowRetrucoIndicator(false);
-            setTrucoRequester(data.playerId);
-            setShowRetrucoResponseDialog(true);
-            setShowTrucoResponseDialog(false);
-            setWaitingForTrucoResponse(true);
-          }, 500);
+        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
+        if (currentPlayer && currentPlayer.team === data.retrucoState.respondingTeam) {
+          setShowRetrucoResponseDialog(true);
         }
       });
 
       socket.on('vale4_requested', (data) => {
-        console.log('=== EVENTO VALE4_REQUESTED ===');
-        console.log('Dados recebidos:', data);
-        
-        // Só mostrar o diálogo de resposta se não for o solicitante
-        if (data.playerId !== socket.id) {
-          // Atualiza o estado do jogo
-          if (data.success) {
-            setGameState(prevState => {
-              const newState = {
-                ...prevState,
-                vale4State: data.vale4State,
-                retrucoState: null, // Limpar o estado do Retruco
-                currentPlayer: data.currentPlayer,
-                showTruco: true,
-                showTrucoIndicator: true
-              };
-              
-              console.log('Novo estado após Vale 4:', {
-                vale4State: newState.vale4State,
-                retrucoState: newState.retrucoState,
-                currentPlayer: newState.currentPlayer
-              });
-              
-              return newState;
-            });
-            
-            // Mostrar o diálogo de resposta após um pequeno delay
-            setTimeout(() => {
-              console.log('Mostrando diálogo de resposta após 500ms');
-              setShowVale4Indicator(true);
-              setTrucoRequester(data.playerId);
-              setShowVale4ResponseDialog(true);
-            }, 500);
-          }
+        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
+        if (currentPlayer && currentPlayer.team === data.vale4State.respondingTeam) {
+          setShowVale4ResponseDialog(true);
         }
       });
 
