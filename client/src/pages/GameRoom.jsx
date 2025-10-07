@@ -1086,29 +1086,39 @@ const GameRoom = () => {
     );
   };
   
+  // Efeito para gerenciar a visibilidade dos diálogos de resposta com base no gameState
+  useEffect(() => {
+    if (!gameState || !socket) return;
+
+    const currentPlayer = gameState.players.find(p => p.id === socket.id);
+    if (!currentPlayer) return;
+
+    const { trucoState, retrucoState, vale4State } = gameState;
+
+    // Lógica para mostrar o diálogo de resposta ao Truco
+    if (trucoState && !trucoState.accepted && trucoState.respondingTeam === currentPlayer.team) {
+      setShowTrucoResponseDialog(true);
+    } else {
+      setShowTrucoResponseDialog(false);
+    }
+
+    // Lógica para mostrar o diálogo de resposta ao Retruco
+    if (retrucoState && !retrucoState.accepted && retrucoState.respondingTeam === currentPlayer.team) {
+      setShowRetrucoResponseDialog(true);
+    } else {
+      setShowRetrucoResponseDialog(false);
+    }
+
+    // Lógica para mostrar o diálogo de resposta ao Vale 4
+    if (vale4State && !vale4State.accepted && vale4State.respondingTeam === currentPlayer.team) {
+      setShowVale4ResponseDialog(true);
+    } else {
+      setShowVale4ResponseDialog(false);
+    }
+  }, [gameState, socket]);
+
   useEffect(() => {
     if (socket) {
-      socket.on('truco_requested', (data) => {
-        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
-        if (currentPlayer && currentPlayer.team === data.trucoState.respondingTeam) {
-          setShowTrucoResponseDialog(true);
-        }
-      });
-
-      socket.on('retruco_requested', (data) => {
-        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
-        if (currentPlayer && currentPlayer.team === data.retrucoState.respondingTeam) {
-          setShowRetrucoResponseDialog(true);
-        }
-      });
-
-      socket.on('vale4_requested', (data) => {
-        const currentPlayer = gameState?.players.find(p => p.id === socket.id);
-        if (currentPlayer && currentPlayer.team === data.vale4State.respondingTeam) {
-          setShowVale4ResponseDialog(true);
-        }
-      });
-
       let isHandlingTrucoResponse = false;
       let isHandlingRetrucoResponse = false;
       let isHandlingVale4Response = false;
@@ -1415,9 +1425,6 @@ const GameRoom = () => {
       });
 
       return () => {
-        socket.off('truco_requested');
-        socket.off('retruco_requested');
-        socket.off('vale4_requested');
         socket.off('truco_response_received');
         socket.off('retruco_response_received');
         socket.off('vale4_response_received');
