@@ -426,6 +426,27 @@ describe('TrucoGame', () => {
   });
 
   describe('Betting Flow', () => {
+    it('deve incluir as informações de time no estado do jogo', () => {
+      const newGame = new TrucoGame('room1', 4);
+      newGame.addPlayer('player1', 'Jogador 1');
+      newGame.addPlayer('player2', 'Jogador 2');
+      newGame.addPlayer('player3', 'Jogador 3');
+      newGame.addPlayer('player4', 'Jogador 4');
+
+      // Marcar todos como prontos para garantir que o estado do jogo esteja atualizado
+      newGame.setPlayerReady('player1');
+      newGame.setPlayerReady('player2');
+      newGame.setPlayerReady('player3');
+      newGame.setPlayerReady('player4');
+
+      const gameState = newGame.getGameState();
+
+      gameState.players.forEach((player, index) => {
+        const expectedTeam = (index % 2) + 1;
+        assert.strictEqual(player.team, expectedTeam, `Jogador ${player.id} deveria estar no time ${expectedTeam}`);
+      });
+    });
+
     it('deve lidar corretamente com a sequência de truco -> retruco -> vale 4', () => {
       const newGame = new TrucoGame('room1', 2);
       newGame.addPlayer('player1', 'Jogador 1');
