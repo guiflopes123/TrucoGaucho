@@ -952,6 +952,7 @@ class TrucoGame {
           isReady: player.isReady,
           connected: true,
           socketId: player.id,
+          team: player.team,
           isCurrentPlayer: player.isCurrentPlayer,
           hand: player.hand ? player.hand.map(card => ({
             value: card.value,
@@ -964,6 +965,7 @@ class TrucoGame {
         console.log('Estado transformado:', {
           id: playerState.id,
           name: playerState.name,
+          team: playerState.team,
           isReady: playerState.isReady,
           cards: playerState.hand.length
         });
