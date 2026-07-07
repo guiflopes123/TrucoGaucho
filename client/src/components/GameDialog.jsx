@@ -196,6 +196,71 @@ export const RetrucoResponseDialog = ({ onAccept, onVale4, onDecline }) => (
   />
 );
 
+export const EnvidoResponseDialog = ({ level, onAccept, onRealEnvido, onFaltaEnvido, onFugir }) => {
+  const titles = {
+    envido: 'ENVIDO!',
+    realEnvido: 'REAL ENVIDO!',
+    faltaEnvido: 'FALTA ENVIDO!'
+  };
+
+  const buttons = [
+    { label: 'Aceitar', variant: 'confirm', onClick: onAccept }
+  ];
+
+  if (level === 'envido') {
+    buttons.push({ label: 'Real Envido', variant: 'secondary', onClick: onRealEnvido });
+    buttons.push({ label: 'Falta Envido', variant: 'secondary', onClick: onFaltaEnvido });
+  } else if (level === 'realEnvido') {
+    buttons.push({ label: 'Falta Envido', variant: 'secondary', onClick: onFaltaEnvido });
+  }
+
+  buttons.push({ label: 'Fugir', variant: 'cancel', onClick: onFugir });
+
+  return (
+    <GameDialog
+      title={titles[level] || 'ENVIDO!'}
+      content="Como você deseja responder?"
+      onClose={() => {}}
+      showCancel={false}
+      buttons={buttons}
+    />
+  );
+};
+
+export const FlorResponseDialog = ({ level, onAccept, onContraFlor, onContraFlorResto, onFugir }) => {
+  const titles = {
+    flor: 'FLOR!',
+    contraFlor: 'CONTRA-FLOR!',
+    contraFlorResto: 'CONTRA-FLOR E O RESTO!'
+  };
+
+  const buttons = [];
+
+  // No nível "flor" (o adversário também tem Flor) não existe a opção de aceitar direto:
+  // só dá para subir a aposta ou fugir.
+  if (level !== 'flor') {
+    buttons.push({ label: 'Aceitar', variant: 'confirm', onClick: onAccept });
+  }
+  if (level === 'flor') {
+    buttons.push({ label: 'Contra-Flor', variant: 'secondary', onClick: onContraFlor });
+  }
+  if (level !== 'contraFlorResto') {
+    buttons.push({ label: 'Contra-Flor e o Resto', variant: 'secondary', onClick: onContraFlorResto });
+  }
+
+  buttons.push({ label: 'Fugir', variant: 'cancel', onClick: onFugir });
+
+  return (
+    <GameDialog
+      title={titles[level] || 'FLOR!'}
+      content="Como você deseja responder?"
+      onClose={() => {}}
+      showCancel={false}
+      buttons={buttons}
+    />
+  );
+};
+
 export const Vale4ResponseDialog = ({ onAccept, onDecline }) => (
   <GameDialog
     title="VALE 4!"

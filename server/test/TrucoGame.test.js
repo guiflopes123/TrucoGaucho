@@ -297,47 +297,68 @@ describe('TrucoGame', () => {
   });
 
   it('deve permitir pedir Envido', () => {
-    readyAllPlayers(game);
-    game.players[0].isCurrentPlayer = true;
-    const result = game.requestEnvido('player1');
+    const newGame = new TrucoGame('room1', 2);
+    newGame.addPlayer('player1', 'Jogador 1');
+    newGame.addPlayer('player2', 'Jogador 2');
+    newGame.setPlayerReady('player1');
+    newGame.setPlayerReady('player2');
+
+    const result = newGame.requestEnvido('player1');
     assert.strictEqual(result.success, true);
-    assert.strictEqual(game.envidoState.level, 'envido');
+    assert.strictEqual(newGame.envidoState.level, 'envido');
   });
 
   it('deve permitir responder ao Envido', () => {
-    readyAllPlayers(game);
-    game.players[0].hand = [
+    const newGame = new TrucoGame('room1', 2);
+    newGame.addPlayer('player1', 'Jogador 1');
+    newGame.addPlayer('player2', 'Jogador 2');
+    newGame.setPlayerReady('player1');
+    newGame.setPlayerReady('player2');
+
+    newGame.players[0].hand = [
       new Card('7', 'ouros'),
       new Card('6', 'ouros'),
       new Card('1', 'paus')
     ]; // Envido = 33
-    
-    game.players[1].hand = [
+
+    newGame.players[1].hand = [
       new Card('3', 'paus'),
       new Card('2', 'paus'),
       new Card('1', 'ouros')
     ]; // Envido = 25
-    
-    game.players[0].isCurrentPlayer = true;
-    game.requestEnvido('player1');
-    
-    const result = game.respondToEnvido('player2', true);
+
+    newGame.requestEnvido('player1');
+
+    const result = newGame.respondToEnvido('player2', true);
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.winningTeam, 1);
-    assert.strictEqual(game.teams[0].score, 2);
+    assert.strictEqual(newGame.teams[0].score, 2);
   });
 
-  it('deve permitir declarar Flor', () => {
-    readyAllPlayers(game);
-    game.players[0].hand = [
+  it('deve permitir declarar Flor quando ninguém mais tem Flor (resolve sozinho, 3 pontos)', () => {
+    const newGame = new TrucoGame('room1', 2);
+    newGame.addPlayer('player1', 'Jogador 1');
+    newGame.addPlayer('player2', 'Jogador 2');
+    newGame.setPlayerReady('player1');
+    newGame.setPlayerReady('player2');
+
+    newGame.players[0].hand = [
       new Card('7', 'ouros'),
       new Card('6', 'ouros'),
       new Card('1', 'ouros')
     ];
-    
-    const result = game.declareFlor('player1');
+    newGame.players[1].hand = [
+      new Card('5', 'copas'),
+      new Card('4', 'espadas'),
+      new Card('2', 'paus')
+    ]; // sem Flor
+
+    const result = newGame.declareFlor('player1');
     assert.strictEqual(result.success, true);
-    assert.strictEqual(game.florState.level, 'flor');
+    assert.strictEqual(result.autoResolved, true);
+    assert.strictEqual(newGame.florState.level, 'flor');
+    assert.strictEqual(newGame.florState.resolved, true);
+    assert.strictEqual(newGame.teams[0].score, 3);
   });
 
   it('deve terminar o jogo quando um time atingir a pontuação alvo', function(done) {
@@ -478,6 +499,200 @@ describe('TrucoGame', () => {
       let responseResult = newGame.respondToVale4('player2', true);
       assert.strictEqual(responseResult.success, true, 'Falha ao responder ao vale 4');
       assert.strictEqual(newGame.handValue, 4, 'O valor da mão deveria ser 4');
+    });
+  });
+
+  describe('Regras de Envido', () => {
+    const setupTwoPlayerGame = () => {
+      const newGame = new TrucoGame('room1', 2);
+      newGame.addPlayer('player1', 'Jogador 1');
+      newGame.addPlayer('player2', 'Jogador 2');
+      newGame.setPlayerReady('player1');
+      newGame.setPlayerReady('player2');
+      return newGame;
+    };
+
+    it('fugir do Envido dá 1 ponto para quem pediu', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.requestEnvido('player1');
+      const result = newGame.respondToEnvido('player2', false);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.accepted, false);
+      assert.strictEqual(result.pointsAwarded, 1);
+      assert.strictEqual(newGame.teams[0].score, 1);
+      assert.strictEqual(newGame.teams[1].score, 0);
+    });
+
+    it('Real Envido pedido direto (sem Envido antes): aceito vale 5, fugir custa 1', () => {
+      const accepted = setupTwoPlayerGame();
+      accepted.requestRealEnvido('player1');
+      assert.strictEqual(accepted.envidoState.level, 'realEnvido');
+      const acceptResult = accepted.respondToEnvido('player2', true);
+      assert.strictEqual(acceptResult.pointsAwarded, 5);
+
+      const fled = setupTwoPlayerGame();
+      fled.requestRealEnvido('player1');
+      const fleeResult = fled.respondToEnvido('player2', false);
+      assert.strictEqual(fleeResult.pointsAwarded, 1);
+      assert.strictEqual(fled.teams[0].score, 1);
+    });
+
+    it('Real Envido pedido em resposta ao Envido: aceito vale 5, fugir custa 2', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.requestEnvido('player1');
+      const raise = newGame.requestRealEnvido('player2');
+      assert.strictEqual(raise.success, true, 'Time respondente deveria poder subir para Real Envido');
+      assert.strictEqual(newGame.envidoState.level, 'realEnvido');
+      assert.strictEqual(newGame.envidoState.respondingTeam, 1, 'Agora quem responde é o time que pediu o Envido original');
+
+      const result = newGame.respondToEnvido('player1', false);
+      assert.strictEqual(result.pointsAwarded, 2, 'Fugir do Real Envido (que subiu do Envido) deveria custar 2 pontos');
+      assert.strictEqual(newGame.teams[1].score, 2, 'Time 2 pediu o Real Envido, então fica com os pontos da fuga');
+    });
+
+    it('Falta Envido pedido em resposta ao Real Envido: fugir custa 5 (valor do Real Envido)', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.requestRealEnvido('player1');
+      const raise = newGame.requestFaltaEnvido('player2');
+      assert.strictEqual(raise.success, true);
+      assert.strictEqual(newGame.envidoState.level, 'faltaEnvido');
+
+      const result = newGame.respondToEnvido('player1', false);
+      assert.strictEqual(result.pointsAwarded, 5);
+    });
+
+    it('Falta Envido aceito dá os pontos que faltam para o time líder bater a meta', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.targetScore = 12;
+      newGame.teams[0].addPoints(9); // faltam 3 para o líder
+
+      newGame.players[0].hand = [new Card('7', 'ouros'), new Card('6', 'ouros'), new Card('1', 'paus')]; // 33
+      newGame.players[1].hand = [new Card('3', 'paus'), new Card('2', 'paus'), new Card('1', 'ouros')]; // 25
+
+      newGame.requestFaltaEnvido('player1');
+      const result = newGame.respondToEnvido('player2', true);
+
+      assert.strictEqual(result.winningTeam, 1);
+      assert.strictEqual(result.pointsAwarded, 3);
+      assert.strictEqual(newGame.teams[0].score, 12);
+    });
+
+    it('em caso de empate no Envido, vence quem pediu primeiro', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.players[0].hand = [new Card('7', 'ouros'), new Card('6', 'ouros'), new Card('1', 'paus')]; // 33
+      newGame.players[1].hand = [new Card('7', 'paus'), new Card('6', 'paus'), new Card('1', 'copas')]; // 33
+
+      newGame.requestEnvido('player1');
+      const result = newGame.respondToEnvido('player2', true);
+
+      assert.strictEqual(result.team1Envido, result.team2Envido);
+      assert.strictEqual(result.winningTeam, 1, 'Time 1 pediu primeiro, deveria vencer o empate');
+    });
+
+    it('não permite pedir Envido depois da primeira rodada', () => {
+      const newGame = setupTwoPlayerGame();
+      newGame.currentRound = 2;
+      const result = newGame.requestEnvido('player1');
+      assert.strictEqual(result.success, false);
+    });
+
+    it('em partidas de 4, só os dois últimos jogadores da rodada podem pedir Envido', () => {
+      const newGame = new TrucoGame('room1', 4);
+      ['player1', 'player2', 'player3', 'player4'].forEach((id, i) => newGame.addPlayer(id, `Jogador ${i + 1}`));
+      newGame.players.forEach(p => newGame.setPlayerReady(p.id));
+
+      // Ainda ninguém jogou: os dois primeiros não podem pedir Envido
+      newGame.currentTurn = 0;
+      newGame.players.forEach((p, i) => p.isCurrentPlayer = (i === 0));
+      const blocked = newGame.requestEnvido('player1');
+      assert.strictEqual(blocked.success, false);
+
+      // Depois de 2 cartas jogadas, o 3º jogador já pode pedir
+      newGame.playCard('player1', newGame.players[0].hand[0]);
+      newGame.playCard('player2', newGame.players[1].hand[0]);
+      const allowed = newGame.requestEnvido('player3');
+      assert.strictEqual(allowed.success, true);
+    });
+  });
+
+  describe('Regras de Flor', () => {
+    const setupFlorDuel = () => {
+      const newGame = new TrucoGame('room1', 2);
+      newGame.addPlayer('player1', 'Jogador 1');
+      newGame.addPlayer('player2', 'Jogador 2');
+      newGame.setPlayerReady('player1');
+      newGame.setPlayerReady('player2');
+
+      newGame.players[0].hand = [new Card('7', 'ouros'), new Card('6', 'ouros'), new Card('1', 'ouros')]; // Flor = 34
+      newGame.players[1].hand = [new Card('5', 'copas'), new Card('4', 'copas'), new Card('2', 'copas')]; // Flor = 31
+      return newGame;
+    };
+
+    it('não permite "aceitar" a Flor diretamente quando ambos têm Flor', () => {
+      const newGame = setupFlorDuel();
+      newGame.declareFlor('player1');
+      const result = newGame.respondToFlor('player2', true);
+      assert.strictEqual(result.success, false);
+    });
+
+    it('fugir da Flor (quando o adversário também tem Flor) custa 4 pontos', () => {
+      const newGame = setupFlorDuel();
+      newGame.declareFlor('player1');
+      const result = newGame.respondToFlor('player2', false);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.pointsAwarded, 4);
+      assert.strictEqual(newGame.teams[0].score, 4);
+    });
+
+    it('Contra-Flor aceita vale 6 para quem tiver a maior Flor', () => {
+      const newGame = setupFlorDuel();
+      newGame.declareFlor('player1');
+      newGame.requestContraFlor('player2');
+      const result = newGame.respondToFlor('player1', true);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.pointsAwarded, 6);
+      assert.strictEqual(result.winningTeam, 1, 'Jogador 1 tem a maior Flor (34 > 31)');
+      assert.strictEqual(newGame.teams[0].score, 6);
+    });
+
+    it('Contra-Flor e o Resto aceita vale a "Falta" mais os 6 pontos da Contra-Flor', () => {
+      const newGame = setupFlorDuel();
+      newGame.targetScore = 12;
+      newGame.teams[0].addPoints(8); // faltam 4
+
+      newGame.declareFlor('player1');
+      newGame.requestContraFlorResto('player2');
+      const result = newGame.respondToFlor('player1', true);
+
+      assert.strictEqual(result.pointsAwarded, 10); // 4 (falta) + 6 (Contra-Flor)
+      assert.strictEqual(newGame.teams[0].score, 18);
+    });
+
+    it('resolve sozinho quando nenhum adversário tem Flor', () => {
+      const newGame = new TrucoGame('room1', 2);
+      newGame.addPlayer('player1', 'Jogador 1');
+      newGame.addPlayer('player2', 'Jogador 2');
+      newGame.setPlayerReady('player1');
+      newGame.setPlayerReady('player2');
+
+      newGame.players[0].hand = [new Card('7', 'ouros'), new Card('6', 'ouros'), new Card('1', 'ouros')];
+      newGame.players[1].hand = [new Card('5', 'copas'), new Card('4', 'espadas'), new Card('2', 'paus')];
+
+      const result = newGame.declareFlor('player1');
+      assert.strictEqual(result.autoResolved, true);
+      assert.strictEqual(newGame.teams[0].score, 3);
+    });
+
+    it('a Flor anula um Envido pendente', () => {
+      const newGame = setupFlorDuel();
+      newGame.requestEnvido('player1');
+      assert.ok(newGame.envidoState);
+
+      newGame.declareFlor('player1');
+      assert.strictEqual(newGame.envidoState, null);
     });
   });
 });

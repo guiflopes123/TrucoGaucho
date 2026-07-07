@@ -623,6 +623,11 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
+    if (this.trucoState || this.retrucoState || this.vale4State) {
+      console.log('[Truco] Erro: já existe uma aposta de Truco/Retruco/Vale 4 em andamento');
+      return { success: false, message: 'Já existe uma aposta em andamento' };
+    }
+
     const respondingTeamId = player.team === 1 ? 2 : 1;
     console.log(`[Truco] Time respondente: ${respondingTeamId}`);
 
@@ -698,6 +703,42 @@ class TrucoGame {
     }
   }
 
+  // Valor da "Falta" (pontos que faltam para o time líder atingir a pontuação alvo)
+  getFaltaValue() {
+    const leadingScore = Math.max(this.teams[0].score, this.teams[1].score);
+    return Math.max(this.targetScore - leadingScore, 1);
+  }
+
+  // Soma do maior Envido de cada time (todos os jogadores participam do cálculo)
+  getEnvidoTotals() {
+    return {
+      team1Envido: this.players.filter(p => p.team === 1).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0),
+      team2Envido: this.players.filter(p => p.team === 2).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0)
+    };
+  }
+
+  // Verifica se um pedido "do zero" (Envido/Real Envido/Falta Envido) pode ser feito agora:
+  // só na primeira rodada, antes do jogador jogar sua carta, sem Flor em disputa, e (em
+  // partidas de 4 jogadores) apenas pelos dois últimos jogadores da rodada.
+  canOpenEnvidoFamily(player) {
+    if (this.florState) {
+      return { ok: false, message: 'A Flor anula o Envido nesta mão' };
+    }
+    if (this.envidoState) {
+      return { ok: false, message: 'Já houve disputa de Envido nesta mão' };
+    }
+    if (this.currentRound !== 1) {
+      return { ok: false, message: 'Envido só pode ser pedido na primeira rodada' };
+    }
+    if (!player.isCurrentPlayer) {
+      return { ok: false, message: 'Não é a vez do jogador' };
+    }
+    if (this.players.length === 4 && this.playedCards.length < 2) {
+      return { ok: false, message: 'Em partidas de 4 jogadores, só os dois últimos da rodada podem pedir Envido' };
+    }
+    return { ok: true };
+  }
+
   requestEnvido(playerId) {
     if (this.gameStatus !== 'playing') {
       return { success: false, message: 'Jogo não está em andamento' };
@@ -708,20 +749,136 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.isCurrentPlayer) {
+    const check = this.canOpenEnvidoFamily(player);
+    if (!check.ok) {
+      return { success: false, message: check.message };
+    }
+
+    this.envidoState = {
+      level: 'envido',
+      value: 2,
+      declineValue: 1,
+      team: player.team,
+      firstCallerTeam: player.team,
+      requestedBy: playerId,
+      accepted: false,
+      resolved: false,
+      waitingResponse: true,
+      respondingTeam: player.team === 1 ? 2 : 1
+    };
+    return { success: true, envidoState: this.envidoState };
+  }
+
+  requestRealEnvido(playerId) {
+    if (this.gameStatus !== 'playing') {
+      return { success: false, message: 'Jogo não está em andamento' };
+    }
+
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { success: false, message: 'Jogador não encontrado' };
+    }
+
+    // Pedido em resposta a um Envido pendente (sobe a aposta)
+    if (this.envidoState && this.envidoState.waitingResponse) {
+      if (this.envidoState.level !== 'envido') {
+        return { success: false, message: 'Real Envido só pode ser pedido em resposta ao Envido' };
+      }
+      if (player.team !== this.envidoState.respondingTeam) {
+        return { success: false, message: 'Não é a vez do seu time responder' };
+      }
+
       this.envidoState = {
-        level: 'envido',
-        value: 2,
+        ...this.envidoState,
+        level: 'realEnvido',
+        value: 5,
+        declineValue: this.envidoState.value, // fugir agora custa o valor do Envido já pendente
         team: player.team,
         requestedBy: playerId,
         accepted: false,
+        resolved: false,
         waitingResponse: true,
-        respondingTeam: player.team === 1 ? 2 : 1
+        respondingTeam: this.envidoState.team
       };
-      return { success: true };
+      return { success: true, envidoState: this.envidoState };
     }
 
-    return { success: false, message: 'Não é a vez do jogador' };
+    // Pedido "do zero" (sem Envido pendente)
+    const check = this.canOpenEnvidoFamily(player);
+    if (!check.ok) {
+      return { success: false, message: check.message };
+    }
+
+    this.envidoState = {
+      level: 'realEnvido',
+      value: 5,
+      declineValue: 1,
+      team: player.team,
+      firstCallerTeam: player.team,
+      requestedBy: playerId,
+      accepted: false,
+      resolved: false,
+      waitingResponse: true,
+      respondingTeam: player.team === 1 ? 2 : 1
+    };
+    return { success: true, envidoState: this.envidoState };
+  }
+
+  requestFaltaEnvido(playerId) {
+    if (this.gameStatus !== 'playing') {
+      return { success: false, message: 'Jogo não está em andamento' };
+    }
+
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { success: false, message: 'Jogador não encontrado' };
+    }
+
+    const faltaValue = this.getFaltaValue();
+
+    // Pedido em resposta a um Envido ou Real Envido pendente (sobe a aposta ao máximo)
+    if (this.envidoState && this.envidoState.waitingResponse) {
+      if (this.envidoState.level === 'faltaEnvido') {
+        return { success: false, message: 'Já foi pedido Falta Envido' };
+      }
+      if (player.team !== this.envidoState.respondingTeam) {
+        return { success: false, message: 'Não é a vez do seu time responder' };
+      }
+
+      this.envidoState = {
+        ...this.envidoState,
+        level: 'faltaEnvido',
+        value: faltaValue,
+        declineValue: this.envidoState.value, // fugir custa o valor do nível anterior (Envido=2 ou Real Envido=5)
+        team: player.team,
+        requestedBy: playerId,
+        accepted: false,
+        resolved: false,
+        waitingResponse: true,
+        respondingTeam: this.envidoState.team
+      };
+      return { success: true, envidoState: this.envidoState };
+    }
+
+    // Pedido "do zero" (sem Envido pendente)
+    const check = this.canOpenEnvidoFamily(player);
+    if (!check.ok) {
+      return { success: false, message: check.message };
+    }
+
+    this.envidoState = {
+      level: 'faltaEnvido',
+      value: faltaValue,
+      declineValue: 1,
+      team: player.team,
+      firstCallerTeam: player.team,
+      requestedBy: playerId,
+      accepted: false,
+      resolved: false,
+      waitingResponse: true,
+      respondingTeam: player.team === 1 ? 2 : 1
+    };
+    return { success: true, envidoState: this.envidoState };
   }
 
   respondToEnvido(playerId, accept) {
@@ -736,28 +893,45 @@ class TrucoGame {
 
     this.envidoState.waitingResponse = false;
     this.envidoState.accepted = accept;
+    this.envidoState.resolved = true;
+
+    const { team1Envido, team2Envido } = this.getEnvidoTotals();
+    let winningTeam = null;
+    let pointsAwarded = 0;
 
     if (accept) {
-      // Calcular Envido para cada time
-      const team1Envido = this.players
-        .filter(p => p.team === 1)
-        .reduce((max, p) => Math.max(max, p.calculateEnvido()), 0);
-      
-      const team2Envido = this.players
-        .filter(p => p.team === 2)
-        .reduce((max, p) => Math.max(max, p.calculateEnvido()), 0);
-
-      const winningTeam = team1Envido > team2Envido ? 1 : 2;
-      this.teams[winningTeam - 1].addPoints(2);
+      if (team1Envido > team2Envido) {
+        winningTeam = 1;
+      } else if (team2Envido > team1Envido) {
+        winningTeam = 2;
+      } else {
+        // Em caso de empate, vence quem cantou primeiro
+        winningTeam = this.envidoState.firstCallerTeam;
+      }
+      pointsAwarded = this.envidoState.value;
+      this.teams[winningTeam - 1].addPoints(pointsAwarded);
+    } else {
+      // Fugir: o time do último pedido (o que está sendo recusado) fica com os pontos de fuga
+      winningTeam = this.envidoState.team;
+      pointsAwarded = this.envidoState.declineValue;
+      this.teams[winningTeam - 1].addPoints(pointsAwarded);
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       accepted: accept,
-      team1Envido: this.players.filter(p => p.team === 1).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0),
-      team2Envido: this.players.filter(p => p.team === 2).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0),
-      winningTeam: accept ? (this.players.filter(p => p.team === 1).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0) > 
-                           this.players.filter(p => p.team === 2).reduce((max, p) => Math.max(max, p.calculateEnvido()), 0) ? 1 : 2) : null
+      team1Envido,
+      team2Envido,
+      winningTeam,
+      pointsAwarded
+    };
+  }
+
+  // Maior Flor de cada time (apenas jogadores que efetivamente têm Flor entram na conta)
+  getFlorTotals() {
+    return {
+      team1Flor: this.players.filter(p => p.team === 1 && p.hasFlor()).reduce((max, p) => Math.max(max, p.calculateFlor()), 0),
+      team2Flor: this.players.filter(p => p.team === 2 && p.hasFlor()).reduce((max, p) => Math.max(max, p.calculateFlor()), 0)
     };
   }
 
@@ -771,17 +945,197 @@ class TrucoGame {
       return { success: false, message: 'Jogador não encontrado' };
     }
 
-    if (player.hasFlor()) {
-      this.florState = {
-        level: 'flor',
-        value: player.calculateFlor(),
-        team: player.team,
-        declaredBy: playerId
-      };
-      return { success: true };
+    if (!player.hasFlor()) {
+      return { success: false, message: 'Jogador não tem Flor' };
     }
 
-    return { success: false, message: 'Jogador não tem Flor' };
+    if (this.florState) {
+      return { success: false, message: 'Já houve disputa de Flor nesta mão' };
+    }
+
+    if (this.envidoState && this.envidoState.resolved) {
+      return { success: false, message: 'O Envido desta mão já foi resolvido' };
+    }
+
+    if (this.currentRound !== 1) {
+      return { success: false, message: 'Flor só pode ser declarada na primeira rodada' };
+    }
+
+    if (!player.isCurrentPlayer) {
+      return { success: false, message: 'Não é a vez do jogador' };
+    }
+
+    if (this.players.length === 4 && this.playedCards.length < 2) {
+      return { success: false, message: 'Em partidas de 4 jogadores, só os dois últimos da rodada podem declarar Flor' };
+    }
+
+    // A Flor anula qualquer disputa de Envido/Real Envido/Falta Envido ainda pendente
+    this.envidoState = null;
+
+    const opponentsWithFlor = this.players.filter(p => p.team !== player.team && p.hasFlor());
+
+    if (opponentsWithFlor.length === 0) {
+      // Ninguém mais tem Flor: resolve sozinho e ganha 3 pontos automaticamente
+      this.florState = {
+        level: 'flor',
+        value: 3,
+        team: player.team,
+        firstCallerTeam: player.team,
+        declaredBy: playerId,
+        waitingResponse: false,
+        resolved: true,
+        accepted: true
+      };
+      this.teams[player.team - 1].addPoints(3);
+      return { success: true, florState: this.florState, autoResolved: true };
+    }
+
+    this.florState = {
+      level: 'flor',
+      value: 3,
+      declineValue: 4,
+      team: player.team,
+      firstCallerTeam: player.team,
+      declaredBy: playerId,
+      waitingResponse: true,
+      resolved: false,
+      respondingTeam: player.team === 1 ? 2 : 1
+    };
+    return { success: true, florState: this.florState, autoResolved: false };
+  }
+
+  requestContraFlor(playerId) {
+    if (this.gameStatus !== 'playing') {
+      return { success: false, message: 'Jogo não está em andamento' };
+    }
+
+    if (!this.florState || !this.florState.waitingResponse) {
+      return { success: false, message: 'Não há Flor pendente para contestar' };
+    }
+
+    if (this.florState.level !== 'flor') {
+      return { success: false, message: 'Contra-Flor só pode ser pedida em resposta a uma Flor' };
+    }
+
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { success: false, message: 'Jogador não encontrado' };
+    }
+
+    if (player.team !== this.florState.respondingTeam) {
+      return { success: false, message: 'Não é a vez do seu time responder' };
+    }
+
+    if (!player.hasFlor()) {
+      return { success: false, message: 'Você precisa ter Flor para pedir Contra-Flor' };
+    }
+
+    this.florState = {
+      ...this.florState,
+      level: 'contraFlor',
+      value: 6,
+      declineValue: 4,
+      team: player.team,
+      requestedBy: playerId,
+      waitingResponse: true,
+      resolved: false,
+      respondingTeam: this.florState.team
+    };
+
+    return { success: true, florState: this.florState };
+  }
+
+  requestContraFlorResto(playerId) {
+    if (this.gameStatus !== 'playing') {
+      return { success: false, message: 'Jogo não está em andamento' };
+    }
+
+    if (!this.florState || !this.florState.waitingResponse) {
+      return { success: false, message: 'Não há Flor pendente para contestar' };
+    }
+
+    if (this.florState.level === 'contraFlorResto') {
+      return { success: false, message: 'Já foi pedido Contra-Flor e o Resto' };
+    }
+
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { success: false, message: 'Jogador não encontrado' };
+    }
+
+    if (player.team !== this.florState.respondingTeam) {
+      return { success: false, message: 'Não é a vez do seu time responder' };
+    }
+
+    if (!player.hasFlor()) {
+      return { success: false, message: 'Você precisa ter Flor para pedir Contra-Flor e o Resto' };
+    }
+
+    // Se veio direto da Flor, a fuga mantém o valor 4; se veio de cima do Contra-Flor, sobe para 6
+    const declineValue = this.florState.level === 'flor' ? 4 : this.florState.value;
+
+    this.florState = {
+      ...this.florState,
+      level: 'contraFlorResto',
+      // Vale a "Falta" além dos pontos da Contra-Flor (6)
+      value: this.getFaltaValue() + 6,
+      declineValue,
+      team: player.team,
+      requestedBy: playerId,
+      waitingResponse: true,
+      resolved: false,
+      respondingTeam: this.florState.team
+    };
+
+    return { success: true, florState: this.florState };
+  }
+
+  respondToFlor(playerId, accept) {
+    if (!this.florState || !this.florState.waitingResponse) {
+      return { success: false, message: 'Não há disputa de Flor pendente para responder' };
+    }
+
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || player.team !== this.florState.respondingTeam) {
+      return { success: false, message: 'Jogador não autorizado a responder' };
+    }
+
+    if (accept && this.florState.level === 'flor') {
+      return { success: false, message: 'Não é possível aceitar diretamente: peça Contra-Flor, Contra-Flor e o Resto, ou fuja' };
+    }
+
+    this.florState.waitingResponse = false;
+    this.florState.accepted = accept;
+    this.florState.resolved = true;
+
+    const { team1Flor, team2Flor } = this.getFlorTotals();
+    let winningTeam = null;
+    let pointsAwarded = 0;
+
+    if (accept) {
+      if (team1Flor > team2Flor) {
+        winningTeam = 1;
+      } else if (team2Flor > team1Flor) {
+        winningTeam = 2;
+      } else {
+        winningTeam = this.florState.firstCallerTeam;
+      }
+      pointsAwarded = this.florState.value;
+      this.teams[winningTeam - 1].addPoints(pointsAwarded);
+    } else {
+      winningTeam = this.florState.team;
+      pointsAwarded = this.florState.declineValue;
+      this.teams[winningTeam - 1].addPoints(pointsAwarded);
+    }
+
+    return {
+      success: true,
+      accepted: accept,
+      team1Flor,
+      team2Flor,
+      winningTeam,
+      pointsAwarded
+    };
   }
 
   removePlayer(playerId) {
@@ -804,13 +1158,17 @@ class TrucoGame {
     if (playerTeamIndex !== -1) {
       this.teams[teamIndex].players.splice(playerTeamIndex, 1);
     }
-    
+
+    // Remover qualquer carta que o jogador removido já tenha jogado nesta rodada,
+    // para não travar/derrubar a determinação do vencedor da rodada
+    this.playedCards = this.playedCards.filter(pc => pc.playerId !== playerId);
+
     // Se não houver mais jogadores, resetar o jogo
     if (this.players.length === 0) {
       this.resetGame();
       return { success: true, roomEmpty: true };
     }
-    
+
     // Se o jogo estava em andamento, ajustar o turno e potencialmente finalizar
     if (this.gameStatus === 'playing') {
       if (playerIndex < this.currentTurn) {
@@ -821,16 +1179,51 @@ class TrucoGame {
         }
       }
 
+      // Recalcular as flags isCurrentPlayer para refletir o novo índice do turno
+      this.players.forEach((p, i) => {
+        p.isCurrentPlayer = (i === this.currentTurn);
+      });
+
       // Se não houver jogadores suficientes, o jogo é interrompido
       if (this.players.length < 2) {
         this.gameStatus = 'waiting';
+      } else if (this.playedCards.length > 0 && this.playedCards.length === this.players.length) {
+        // A saída do jogador completou a rodada (todos os restantes já haviam jogado)
+        this.determineRoundWinner();
       }
     }
-    
+
     // Atualizar o estado do jogo após remover o jogador
     this.updateGameState();
-    
+
     return { success: true, roomEmpty: false };
+  }
+
+  // Remapeia o id de um jogador (usado quando um socket reconecta com um novo id)
+  reassignPlayerId(oldId, newId) {
+    const player = this.players.find(p => p.id === oldId);
+    if (!player) {
+      return { success: false, message: 'Jogador não encontrado' };
+    }
+
+    player.id = newId;
+
+    this.playedCards.forEach(pc => {
+      if (pc.playerId === oldId) pc.playerId = newId;
+    });
+
+    [this.trucoState, this.retrucoState, this.vale4State, this.envidoState].forEach(state => {
+      if (state && state.requestedBy === oldId) state.requestedBy = newId;
+    });
+
+    if (this.florState) {
+      if (this.florState.declaredBy === oldId) this.florState.declaredBy = newId;
+      if (this.florState.contraDeclaredBy === oldId) this.florState.contraDeclaredBy = newId;
+    }
+
+    if (this.roundStarter === oldId) this.roundStarter = newId;
+
+    return { success: true };
   }
   
   resetGame() {
@@ -907,7 +1300,8 @@ class TrucoGame {
   }
   
   // Método para obter o estado do jogo para enviar ao cliente
-  getGameState() {
+  // viewerId: se informado, a mão dos demais jogadores é ocultada (evita vazamento de cartas)
+  getGameState(viewerId) {
     console.log('\n=== GERANDO ESTADO DO JOGO ===');
     console.log('Estado atual dos jogadores no servidor:');
     this.players.forEach(player => {
@@ -946,6 +1340,8 @@ class TrucoGame {
           isReady: player.isReady
         });
 
+        // Só o próprio jogador pode ver os valores da sua mão; para os demais, mandamos apenas a contagem
+        const isViewer = viewerId === undefined || viewerId === null || player.id === viewerId;
         const playerState = {
           id: player.id,
           name: player.name,
@@ -954,12 +1350,12 @@ class TrucoGame {
           socketId: player.id,
           team: player.team,
           isCurrentPlayer: player.isCurrentPlayer,
-          hand: player.hand ? player.hand.map(card => ({
+          hand: player.hand ? (isViewer ? player.hand.map(card => ({
             value: card.value,
             suit: card.suit,
             display: card.display,
             isManilha: card.isManilha
-          })) : []
+          })) : player.hand.map(() => ({ hidden: true }))) : []
         };
 
         console.log('Estado transformado:', {

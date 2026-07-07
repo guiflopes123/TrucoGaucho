@@ -7,7 +7,7 @@ const GuideContainer = styled.div`
   top: 0;
   width: 300px;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.9);
+  background: #ffffff;
   transition: right 0.3s ease;
   z-index: 1000;
   box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
@@ -40,12 +40,12 @@ const GuideButton = styled.button`
 
 const GuideHeader = styled.div`
   padding: 20px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #ddd;
   text-align: center;
 `;
 
 const GuideTitle = styled.h2`
-  color: #FFD700;
+  color: #B8860B;
   margin: 0;
   font-size: 1.5rem;
 `;
@@ -61,11 +61,11 @@ const CardRankingSection = styled.div`
 `;
 
 const SectionTitle = styled.h3`
-  color: #FFD700;
+  color: #B8860B;
   margin-top: 0;
   margin-bottom: 15px;
   font-size: 1.2rem;
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid #ddd;
   padding-bottom: 5px;
 `;
 
@@ -80,21 +80,21 @@ const CardItem = styled.li`
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid #333;
-  
+  border-bottom: 1px solid #eee;
+
   &:last-child {
     border-bottom: none;
   }
 `;
 
 const CardName = styled.span`
-  color: white;
+  color: #222;
   display: flex;
   align-items: center;
 `;
 
 const CardValue = styled.span`
-  color: ${props => props.isManilha ? '#FFD700' : '#CCC'};
+  color: ${props => props.isManilha ? '#B8860B' : '#666'};
   font-weight: ${props => props.isManilha ? 'bold' : 'normal'};
 `;
 
@@ -111,7 +111,7 @@ const RuleSection = styled.div`
 const RuleList = styled.ul`
   padding-left: 20px;
   margin: 0;
-  color: #CCC;
+  color: #444;
 `;
 
 const RuleItem = styled.li`
@@ -163,7 +163,7 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Sete de Ouros
                 </CardName>
                 <CardValue isManilha={true}>Manilha</CardValue>
@@ -184,14 +184,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Três
                 </CardName>
                 <CardValue>10</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Três
                 </CardName>
                 <CardValue>10</CardValue>
@@ -212,14 +212,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Dois
                 </CardName>
                 <CardValue>9</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Dois
                 </CardName>
                 <CardValue>9</CardValue>
@@ -240,14 +240,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Ás
                 </CardName>
                 <CardValue>8</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Ás
                 </CardName>
                 <CardValue>8</CardValue>
@@ -268,14 +268,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Rei (K)
                 </CardName>
                 <CardValue>7</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Rei (K)
                 </CardName>
                 <CardValue>7</CardValue>
@@ -296,14 +296,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Valete (J)
                 </CardName>
                 <CardValue>6</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Valete (J)
                 </CardName>
                 <CardValue>6</CardValue>
@@ -324,14 +324,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Dama (Q)
                 </CardName>
                 <CardValue>5</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Dama (Q)
                 </CardName>
                 <CardValue>5</CardValue>
@@ -352,14 +352,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Sete
                 </CardName>
                 <CardValue>4</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Sete (não manilha)
                 </CardName>
                 <CardValue>4</CardValue>
@@ -380,14 +380,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Seis
                 </CardName>
                 <CardValue>3</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Seis
                 </CardName>
                 <CardValue>3</CardValue>
@@ -408,14 +408,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Cinco
                 </CardName>
                 <CardValue>2</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Cinco
                 </CardName>
                 <CardValue>2</CardValue>
@@ -436,14 +436,14 @@ const CardGuide = () => {
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♥</CardSymbol>
+                  <CardSymbol color="#B22222">♥</CardSymbol>
                   Quatro
                 </CardName>
                 <CardValue>1</CardValue>
               </CardItem>
               <CardItem>
                 <CardName>
-                  <CardSymbol color="red">♦</CardSymbol>
+                  <CardSymbol color="#B22222">♦</CardSymbol>
                   Quatro
                 </CardName>
                 <CardValue>1</CardValue>

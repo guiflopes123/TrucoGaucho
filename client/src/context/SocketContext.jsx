@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import API_URL from '../config/api';
 import { io } from 'socket.io-client';
 
@@ -18,6 +18,11 @@ export const SocketProvider = ({ children }) => {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const maxReconnectAttempts = 20;
   const reconnectDelay = 2000;
+  // Guarda o socket.id anterior para que o servidor possa remapear o jogador
+  // caso a reconexão gere um novo socket.id (a recuperação de sessão do Socket.IO
+  // cobre a maioria dos casos, mas nem sempre preserva o id).
+  const previousSocketIdRef = useRef(null);
+  const currentSocketIdRef = useRef(null);
 
   // Inicializar o socket
   useEffect(() => {
@@ -28,21 +33,25 @@ export const SocketProvider = ({ children }) => {
       timeout: 60000,
       transports: ['websocket', 'polling']
     });
-    
+
     newSocket.on('connect', () => {
       console.log('Conectado ao servidor');
       setConnected(true);
       setError(null);
       setReconnectAttempts(0);
       setIsReconnecting(false);
-      
-      // Tentar reconectar à sala se houver uma sala atual
-      if (currentRoom) {
+
+      previousSocketIdRef.current = currentSocketIdRef.current;
+      currentSocketIdRef.current = newSocket.id;
+
+      // Tentar reconectar à sala se houver uma sala atual e o socket.id tiver mudado
+      if (currentRoom && previousSocketIdRef.current && previousSocketIdRef.current !== newSocket.id) {
         console.log('Tentando reconectar à sala:', currentRoom);
         // Adicionar um pequeno delay antes de tentar reconectar à sala
         setTimeout(() => {
           newSocket.emit('reconnect_to_room', {
-            roomId: currentRoom,
+            roomId: currentRoom.id,
+            oldPlayerId: previousSocketIdRef.current,
             timestamp: Date.now()
           });
         }, 1000);

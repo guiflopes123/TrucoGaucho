@@ -10,14 +10,16 @@ import CardGuide from '../components/CardGuide';
 import PlayerReadyButton from '../components/PlayerReadyButton';
 import ReadyCounter from '../components/ReadyCounter';
 import TurnIndicator from '../components/TurnIndicator';
-import { 
-  TrucoDialog, 
-  EnvidoDialog, 
-  FlorDialog, 
+import {
+  TrucoDialog,
+  EnvidoDialog,
+  FlorDialog,
   TrucoResponseDialog,
   RetrucoResponseDialog,
   Vale4ResponseDialog,
-  GameOverDialog 
+  EnvidoResponseDialog,
+  FlorResponseDialog,
+  GameOverDialog
 } from '../components/GameDialog';
 
 const pulse = keyframes`
@@ -237,7 +239,9 @@ const GameRoom = () => {
   const [isHandlingTrucoResponse, setIsHandlingTrucoResponse] = useState(false);
   const [isHandlingRetrucoResponse, setIsHandlingRetrucoResponse] = useState(false);
   const [isHandlingVale4Response, setIsHandlingVale4Response] = useState(false);
-  
+  const [showEnvidoResponseDialog, setShowEnvidoResponseDialog] = useState(false);
+  const [showFlorResponseDialog, setShowFlorResponseDialog] = useState(false);
+
   
   const { 
     connected,
@@ -633,7 +637,49 @@ const GameRoom = () => {
     requestContraFlorResto(roomId);
     setShowFlorDialog(false);
   };
-  
+
+  // Manipuladores de resposta ao Envido/Real Envido/Falta Envido
+  const acceptEnvidoResponse = () => {
+    respondToEnvido(roomId, true);
+    setShowEnvidoResponseDialog(false);
+  };
+
+  const fugirEnvidoResponse = () => {
+    respondToEnvido(roomId, false);
+    setShowEnvidoResponseDialog(false);
+  };
+
+  const raiseRealEnvidoResponse = () => {
+    requestRealEnvido(roomId);
+    setShowEnvidoResponseDialog(false);
+  };
+
+  const raiseFaltaEnvidoResponse = () => {
+    requestFaltaEnvido(roomId);
+    setShowEnvidoResponseDialog(false);
+  };
+
+  // Manipuladores de resposta à Flor/Contra-Flor/Contra-Flor e o Resto
+  const acceptFlorResponse = () => {
+    respondToFlor(roomId, true);
+    setShowFlorResponseDialog(false);
+  };
+
+  const fugirFlorResponse = () => {
+    respondToFlor(roomId, false);
+    setShowFlorResponseDialog(false);
+  };
+
+  const raiseContraFlorResponse = () => {
+    requestContraFlor(roomId);
+    setShowFlorResponseDialog(false);
+  };
+
+  const raiseContraFlorRestoResponse = () => {
+    requestContraFlorResto(roomId);
+    setShowFlorResponseDialog(false);
+  };
+
   // Manipuladores de resposta a Truco/Envido/Flor
   const acceptChallenge = () => {
     if (responseType === 'truco') {
@@ -814,14 +860,20 @@ const GameRoom = () => {
   };
   
   
+  const envidoLevelLabels = {
+    envido: 'Envido',
+    realEnvido: 'Real Envido',
+    faltaEnvido: 'Falta Envido'
+  };
+
   const renderGameTable = () => {
     if (!gameState) return null;
-    
+
     const team1Score = gameState.teams && gameState.teams[0] ? gameState.teams[0].score : 0;
     const team2Score = gameState.teams && gameState.teams[1] ? gameState.teams[1].score : 0;
     const team1RoundsWon = gameState.teams && gameState.teams[0] ? gameState.teams[0].roundsWon : 0;
     const team2RoundsWon = gameState.teams && gameState.teams[1] ? gameState.teams[1].roundsWon : 0;
-    
+
     return (
       <GameTable
         team1Score={team1Score}
@@ -831,8 +883,8 @@ const GameRoom = () => {
         team2RoundsWon={team2RoundsWon}
         handValue={gameState.handValue || 1}
         showTruco={gameState.showTrucoIndicator || false}
-        showEnvido={gameState.envidoState !== null}
-        envidoType={gameState.envidoState?.type || 'Envido'}
+        showEnvido={gameState.envidoState?.waitingResponse === true}
+        envidoType={envidoLevelLabels[gameState.envidoState?.level] || 'Envido'}
       >
         {renderPlayedCards()}
         {renderWaitingMessage()}
@@ -975,6 +1027,28 @@ const GameRoom = () => {
       isNewRoundAfterRetruco
     });
 
+    // Envido/Real Envido/Falta Envido e Flor só podem ser pedidos na 1ª rodada, antes de
+    // jogar a carta e, em partidas de 4 jogadores, apenas pelos dois últimos da rodada.
+    const playedCardsCount = gameState?.playedCards?.length || 0;
+    const isFourPlayerGame = gameState?.players?.length === 4;
+    const isFirstRound = (gameState?.currentRound || 1) === 1;
+    const isLastTwoOfFour = !isFourPlayerGame || playedCardsCount >= 2;
+    const envidoAlreadyResolved = gameState?.envidoState?.resolved === true;
+
+    const canRequestEnvido = gameState?.gameStatus === 'playing' &&
+      isCurrentPlayer &&
+      isFirstRound &&
+      isLastTwoOfFour &&
+      !gameState?.envidoState &&
+      !gameState?.florState;
+
+    const canDeclareFlor = gameState?.gameStatus === 'playing' &&
+      isCurrentPlayer &&
+      isFirstRound &&
+      isLastTwoOfFour &&
+      !gameState?.florState &&
+      !envidoAlreadyResolved;
+
     return (
       <GameActions
         onTruco={handleTruco}
@@ -989,8 +1063,8 @@ const GameRoom = () => {
         disableTruco={!canPlayTruco}
         disableRetruco={!canPlayRetruco}
         disableVale4={!canPlayVale4}
-        disableEnvido={!isCurrentPlayer}
-        disableFlor={!isCurrentPlayer}
+        disableEnvido={!canRequestEnvido}
+        disableFlor={!canDeclareFlor}
       />
     );
   };
@@ -1060,6 +1134,24 @@ const GameRoom = () => {
             onDecline={declineVale4}
           />
         )}
+        {showEnvidoResponseDialog && (
+          <EnvidoResponseDialog
+            level={gameState?.envidoState?.level}
+            onAccept={acceptEnvidoResponse}
+            onRealEnvido={raiseRealEnvidoResponse}
+            onFaltaEnvido={raiseFaltaEnvidoResponse}
+            onFugir={fugirEnvidoResponse}
+          />
+        )}
+        {showFlorResponseDialog && (
+          <FlorResponseDialog
+            level={gameState?.florState?.level}
+            onAccept={acceptFlorResponse}
+            onContraFlor={raiseContraFlorResponse}
+            onContraFlorResto={raiseContraFlorRestoResponse}
+            onFugir={fugirFlorResponse}
+          />
+        )}
         {showEnvidoDialog && (
           <EnvidoDialog
             onEnvido={confirmEnvido}
@@ -1093,7 +1185,7 @@ const GameRoom = () => {
     const currentPlayer = gameState.players.find(p => p.id === socket.id);
     if (!currentPlayer) return;
 
-    const { trucoState, retrucoState, vale4State } = gameState;
+    const { trucoState, retrucoState, vale4State, envidoState, florState } = gameState;
 
     // Lógica para mostrar o diálogo de resposta ao Truco
     if (trucoState && !trucoState.accepted && trucoState.respondingTeam === currentPlayer.team) {
@@ -1114,6 +1206,20 @@ const GameRoom = () => {
       setShowVale4ResponseDialog(true);
     } else {
       setShowVale4ResponseDialog(false);
+    }
+
+    // Lógica para mostrar o diálogo de resposta ao Envido/Real Envido/Falta Envido
+    if (envidoState && envidoState.waitingResponse && envidoState.respondingTeam === currentPlayer.team) {
+      setShowEnvidoResponseDialog(true);
+    } else {
+      setShowEnvidoResponseDialog(false);
+    }
+
+    // Lógica para mostrar o diálogo de resposta à Flor/Contra-Flor/Contra-Flor e o Resto
+    if (florState && florState.waitingResponse && florState.respondingTeam === currentPlayer.team) {
+      setShowFlorResponseDialog(true);
+    } else {
+      setShowFlorResponseDialog(false);
     }
   }, [gameState, socket]);
 
@@ -1344,10 +1450,12 @@ const GameRoom = () => {
             }
 
             // Não atualize o estado se não houver mudança real
-            if (newState.trucoState === prevState?.trucoState && 
-                newState.retrucoState === prevState?.retrucoState && 
+            if (newState.trucoState === prevState?.trucoState &&
+                newState.retrucoState === prevState?.retrucoState &&
                 newState.vale4State === prevState?.vale4State &&
-                newState.handValue === prevState?.handValue) {
+                newState.handValue === prevState?.handValue &&
+                newState.envidoState === prevState?.envidoState &&
+                newState.florState === prevState?.florState) {
               return prevState;
             }
 

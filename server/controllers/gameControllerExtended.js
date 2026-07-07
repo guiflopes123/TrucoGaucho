@@ -5,38 +5,67 @@ const gameController = require('../controllers/gameController');
 const { TrucoGame } = require('../models/TrucoGame');
 const ioModule = require('../socket/io');
 
+// Timers de remoção pendentes por jogador desconectado (permite cancelar se ele reconectar)
+const pendingRemovals = new Map();
+
+// Cancela a remoção agendada de um jogador que reconectou a tempo
+const cancelPendingRemoval = (socketId) => {
+  const timeoutHandle = pendingRemovals.get(socketId);
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+    pendingRemovals.delete(socketId);
+  }
+};
+
 // Função para verificar se um jogador está em alguma sala
 const checkPlayerInRooms = (socketId) => {
   console.log('Verificando jogador desconectado:', socketId);
-  
+
   for (const [roomId, room] of gameController.gameRooms.entries()) {
     const player = room.players.find(p => p.id === socketId);
     if (player) {
       console.log('Jogador encontrado na sala:', roomId);
-      
+
       // Marcar jogador como desconectado
       player.connected = false;
       player.lastDisconnect = Date.now();
-      
+
       // Notificar outros jogadores
       const io = ioModule.getIO();
       io.to(roomId).emit('player_disconnected', {
         playerId: socketId,
         playerName: player.name
       });
-      
+
       // Configurar timeout para remoção do jogador
-      setTimeout(() => {
+      const timeoutHandle = setTimeout(() => {
+        pendingRemovals.delete(socketId);
         const currentRoom = gameController.gameRooms.get(roomId);
         if (currentRoom) {
           const currentPlayer = currentRoom.players.find(p => p.id === socketId);
           if (currentPlayer && !currentPlayer.connected) {
             console.log('Removendo jogador por timeout de reconexão:', socketId);
-            gameController.removePlayerFromRoom(roomId, socketId);
+            const result = gameController.removePlayerFromRoom(roomId, socketId);
+
+            if (result.success) {
+              const currentIo = ioModule.getIO();
+              if (!result.roomDeleted) {
+                // Sem isso, os jogadores restantes nunca sabiam que o jogo continuou
+                // sem o jogador removido e a partida ficava travada para sempre.
+                gameController.broadcastGameState(roomId);
+                currentIo.to(roomId).emit('player_removed', {
+                  playerId: socketId,
+                  playerName: currentPlayer.name
+                });
+              }
+              currentIo.emit('rooms_updated', { rooms: gameController.getAllRooms() });
+            }
           }
         }
       }, 60000); // Aumentado para 60 segundos
-      
+
+      pendingRemovals.set(socketId, timeoutHandle);
+
       break;
     }
   }
@@ -79,11 +108,10 @@ gameController.setPlayerReady = function(roomId, playerId) {
     return result;
   }
 
-  // Atualiza o estado do jogo para todos os jogadores
-  const io = ioModule.getIO();
-  io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+  // Atualiza o estado do jogo para cada jogador (mão dos outros permanece oculta)
+  gameController.broadcastGameState(roomId);
 
-  return { success: true };
+  return { success: true, gameState: result.gameState };
 };
 
 // Adicionando função para verificar salas vazias e removê-las
@@ -105,5 +133,6 @@ setInterval(() => {
 
 // Adicionar as funções estendidas ao gameController
 gameController.checkPlayerInRooms = checkPlayerInRooms;
+gameController.cancelPendingRemoval = cancelPendingRemoval;
 
 module.exports = gameController;

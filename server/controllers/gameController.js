@@ -103,13 +103,49 @@ const removePlayerFromRoom = (roomId, playerId) => {
   }
   
   room.players.splice(playerIndex, 1);
-  
-  // Se o jogo já começou e um jogador sair, finalizar o jogo
-  if (room.status === 'playing') {
-    room.status = 'finished';
-  }
-  
+
+  // Sincronizar o status da sala com o estado real do jogo (o modelo já decide
+  // se o jogo continua com os jogadores restantes ou volta para "waiting")
+  room.status = room.game.gameStatus;
+
   return { success: true, room };
+};
+
+// Remapear o socket de um jogador (usado quando ele reconecta com um novo socket.id)
+const reassignPlayerSocket = (roomId, oldPlayerId, newPlayerId) => {
+  const room = gameRooms.get(roomId);
+  if (!room) return { success: false, message: 'Sala não encontrada' };
+
+  const roomPlayer = room.players.find(p => p.id === oldPlayerId);
+  if (!roomPlayer) {
+    return { success: false, message: 'Jogador não encontrado nesta sala' };
+  }
+
+  const gameResult = room.game.reassignPlayerId(oldPlayerId, newPlayerId);
+  if (!gameResult.success) {
+    return gameResult;
+  }
+
+  roomPlayer.id = newPlayerId;
+  roomPlayer.socketId = newPlayerId;
+  roomPlayer.connected = true;
+
+  return { success: true, room };
+};
+
+// Emitir o estado do jogo individualmente para cada jogador da sala,
+// ocultando a mão dos demais jogadores (evita vazamento de cartas)
+const broadcastGameState = (roomId) => {
+  const room = gameRooms.get(roomId);
+  if (!room) return;
+
+  // Manter o status da sala sincronizado com o estado real do jogo
+  room.status = room.game.gameStatus;
+
+  const io = ioModule.getIO();
+  room.game.players.forEach(player => {
+    io.to(player.id).emit('game_state_updated', { gameState: room.game.getGameState(player.id) });
+  });
 };
 
 // Jogar uma carta
@@ -123,21 +159,19 @@ const playCard = (roomId, playerId, card) => {
   
   // Jogar a carta no jogo
   const result = room.game.playCard(playerId, card);
-  
+
   if (result.success) {
-    // Emitir o estado atual para todos os jogadores
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: result.gameState });
-    
+    // Emitir o estado atual para cada jogador (mão dos outros jogadores fica oculta)
+    broadcastGameState(roomId);
+
     // Se todas as cartas foram jogadas, aguardar o estado atualizado após o delay
     if (room.game.playedCards.length === room.game.players.length) {
       setTimeout(() => {
-        const updatedState = room.game.getGameState();
-        io.to(roomId).emit('game_state_updated', { gameState: updatedState });
+        broadcastGameState(roomId);
       }, 3000);
     }
   }
-  
+
   return result;
 };
 
@@ -154,9 +188,8 @@ const requestTruco = (roomId, playerId) => {
   const result = room.game.requestTruco(playerId);
 
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
-    io.to(roomId).emit('truco_requested', {
+    broadcastGameState(roomId);
+    ioModule.getIO().to(roomId).emit('truco_requested', {
         playerId: playerId,
         trucoState: result.trucoState
       });
@@ -178,9 +211,8 @@ const requestRetruco = (roomId, playerId) => {
   const result = room.game.requestRetruco(playerId);
 
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
-    io.to(roomId).emit('retruco_requested', {
+    broadcastGameState(roomId);
+    ioModule.getIO().to(roomId).emit('retruco_requested', {
         playerId: playerId,
         retrucoState: result.retrucoState
       });
@@ -202,9 +234,8 @@ const requestVale4 = (roomId, playerId) => {
   const result = room.game.requestVale4(playerId);
 
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
-    io.to(roomId).emit('vale4_requested', {
+    broadcastGameState(roomId);
+    ioModule.getIO().to(roomId).emit('vale4_requested', {
         playerId: playerId,
         vale4State: result.vale4State
       });
@@ -224,10 +255,9 @@ const respondToTruco = (roomId, playerId, accept) => {
   
   // Responder ao Truco no jogo
   const result = room.game.respondToTruco(playerId, accept);
-  
+
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    broadcastGameState(roomId);
   }
 
   // Verificar se o jogo terminou
@@ -249,10 +279,9 @@ const respondToRetruco = (roomId, playerId, accept) => {
   
   // Responder ao Retruco no jogo
   const result = room.game.respondToRetruco(playerId, accept);
-  
+
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    broadcastGameState(roomId);
   }
 
   // Verificar se o jogo terminou
@@ -274,10 +303,9 @@ const respondToVale4 = (roomId, playerId, accept) => {
   
   // Responder ao Vale 4 no jogo
   const result = room.game.respondToVale4(playerId, accept);
-  
+
   if (result.success) {
-    const io = ioModule.getIO();
-    io.to(roomId).emit('game_state_updated', { gameState: room.game.getGameState() });
+    broadcastGameState(roomId);
   }
 
   // Verificar se o jogo terminou
@@ -413,15 +441,15 @@ const respondToFlor = (roomId, playerId, accept) => {
   return result;
 };
 
-// Obter o estado do jogo
-const getGameState = (roomId) => {
+// Obter o estado do jogo (viewerId opcional: oculta a mão dos demais jogadores)
+const getGameState = (roomId, viewerId) => {
   const room = gameRooms.get(roomId);
   if (!room) return null;
-  
+
   // Garantir que o estado da sala está sincronizado com o estado do jogo
   room.status = room.game.gameStatus;
-  
-  return room.game.getGameState();
+
+  return room.game.getGameState(viewerId);
 };
 
 // Obter as cartas de um jogador
@@ -492,6 +520,8 @@ module.exports = {
   getRoom,
   addPlayerToRoom,
   removePlayerFromRoom,
+  reassignPlayerSocket,
+  broadcastGameState,
   playCard,
   requestTruco,
   requestRetruco,
