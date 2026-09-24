@@ -1,12 +1,10 @@
-// Módulo para exportar a instância do Socket.IO
+// Guarda a instância do Socket.IO para que os controladores possam emitir eventos.
 let io;
 
-// Função para inicializar o módulo io
 const init = (socketIo) => {
   io = socketIo;
 };
 
-// Função para obter a instância do io
 const getIO = () => {
   if (!io) {
     throw new Error('Socket.IO não foi inicializado');
@@ -14,7 +12,8 @@ const getIO = () => {
   return io;
 };
 
-module.exports = {
-  init,
-  getIO
-}; 
+// Canal privado de um jogador: todas as conexões dele entram nesta "sala" do Socket.IO,
+// assim o servidor endereça o jogador (e não um socket.id que muda a cada reconexão).
+const playerChannel = (playerId) => `player:${playerId}`;
+
+module.exports = { init, getIO, playerChannel };

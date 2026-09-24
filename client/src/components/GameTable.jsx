@@ -2,160 +2,115 @@ import React from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const pulse = keyframes`
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+  100% { transform: scale(1); }
 `;
 
-const fadeIn = keyframes`
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+const Wrapper = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 `;
 
-const slideIn = keyframes`
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+const StatusBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 12px 0;
 `;
 
 const TableContainer = styled.div`
   flex: 1;
-  background: radial-gradient(ellipse at center, #006400 0%, #004d00 100%);
-  border-radius: 50%;
-  margin: 20px;
   position: relative;
+  margin: 10px 12px 12px;
+  min-height: 460px;
+  background: radial-gradient(ellipse at center, #006400 0%, #004d00 100%);
+  border-radius: 48px;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), inset 0 0 50px rgba(0, 0, 0, 0.3);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: visible;
-  min-height: 500px;
-  
-  &:before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    height: 80%;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 215, 0, 0.3);
-    pointer-events: none;
+  border: 3px solid rgba(255, 215, 0, 0.25);
+
+  @media (max-width: 520px) {
+    min-height: 400px;
+    border-radius: 32px;
   }
 `;
 
-const CenterArea = styled.div`
-  position: absolute;
+const Scoreboard = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.1);
-`;
-
-const ScoreDisplay = styled.div`
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #FFD700;
-  padding: 5px 15px;
+  gap: 10px;
+  padding: 6px 14px;
   border-radius: 20px;
-  font-size: 1.2rem;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffd700;
   font-weight: bold;
-  z-index: 5;
-  animation: ${fadeIn} 0.5s ease;
+  white-space: nowrap;
 `;
 
-const HandValueDisplay = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #FFD700;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 1.5rem;
-  font-weight: bold;
-  z-index: 5;
-  animation: ${pulse} 1s infinite;
+const Score = styled.span`
+  font-size: 1.3rem;
+  color: ${props => (props.$mine ? '#8fd19e' : '#ff9d9d')};
 `;
 
-const TrucoIndicator = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: rgba(178, 34, 34, 0.8);
+const HandValue = styled.div`
+  padding: 4px 12px;
+  border-radius: 14px;
+  background: rgba(178, 34, 34, 0.9);
   color: white;
-  padding: 15px 30px;
-  border-radius: 10px;
-  font-size: 2rem;
   font-weight: bold;
-  z-index: 10;
-  animation: ${slideIn} 0.5s ease, ${pulse} 1s infinite;
+  font-size: 0.9rem;
+  animation: ${props => (props.$highlight ? pulse : 'none')} 1.4s infinite;
 `;
 
-const EnvidoIndicator = styled(TrucoIndicator)`
-  background-color: rgba(0, 100, 0, 0.8);
+const RoundPips = styled.div`
+  display: flex;
+  gap: 6px;
 `;
 
-const GameTable = ({
-  team1Score = 0,
-  team2Score = 0,
-  currentRound = 1,
-  team1RoundsWon = 0,
-  team2RoundsWon = 0,
-  handValue = 0,
-  showTruco = false,
-  showEnvido = false,
-  envidoType = 'Envido',
-  children
-}) => {
-  console.log('GameTable props:', { team1Score, team2Score, currentRound, team1RoundsWon, team2RoundsWon, handValue, showTruco, showEnvido, envidoType });
-  
+const Pip = styled.span`
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  background: ${props => props.$color};
+`;
+
+const pipColor = (result, myTeam) => {
+  if (!result) return 'transparent';
+  if (!result.winnerTeam) return '#bbb';
+  return result.winnerTeam === myTeam ? '#4caf50' : '#e53935';
+};
+
+const GameTable = ({ teams, myTeam, handValue, roundResults, showHand, children }) => {
+  const mine = teams.find(t => t.id === myTeam) || teams[0];
+  const theirs = teams.find(t => t.id !== mine.id) || teams[1];
+
   return (
-    <TableContainer>
-      <ScoreDisplay>
-        {team1Score} - {team2Score}
-      </ScoreDisplay>
-      
-  
-      
-      {showEnvido && (
-        <EnvidoIndicator>
-          {envidoType.toUpperCase()}!
-        </EnvidoIndicator>
-      )}
-      
-      <CenterArea>
-        {children}
-      </CenterArea>
-    </TableContainer>
+    <Wrapper>
+      <StatusBar>
+        <Scoreboard aria-label={`Placar: nós ${mine.score}, eles ${theirs.score}`}>
+          <span>Nós</span>
+          <Score $mine>{mine.score}</Score>
+          <span>×</span>
+          <Score>{theirs.score}</Score>
+          <span>Eles</span>
+        </Scoreboard>
+
+        {showHand && (
+          <>
+            <HandValue $highlight={handValue > 1}>Mão valendo {handValue}</HandValue>
+            <RoundPips aria-label="Resultado das rodadas (verde: nós, vermelho: eles, cinza: empate)">
+              {[0, 1, 2].map(i => <Pip key={i} $color={pipColor(roundResults[i], myTeam)} />)}
+            </RoundPips>
+          </>
+        )}
+      </StatusBar>
+
+      <TableContainer aria-label="Mesa de jogo">{children}</TableContainer>
+    </Wrapper>
   );
 };
 

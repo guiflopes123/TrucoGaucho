@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useSocket } from '../context/SocketContext';
@@ -28,7 +28,7 @@ const HomeContainer = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  min-height: 100vh;
   padding: 20px;
   text-align: center;
   background: linear-gradient(to bottom, #006400, #003300);
@@ -151,30 +151,17 @@ const CardDisplay = styled.div`
 
 const Home = () => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [isValid, setIsValid] = useState(false);
+  const [username, setUsername] = useState(() => localStorage.getItem('username') || '');
   const { connected, error, clearError } = useSocket();
-  
-  useEffect(() => {
-    // Verificar se já existe um nome de usuário armazenado
-    const storedUsername = localStorage.getItem('username');
-    if (storedUsername) {
-      setUsername(storedUsername);
-      setIsValid(true);
-    }
-  }, []);
-  
-  // Validar nome de usuário
-  useEffect(() => {
-    setIsValid(username.trim().length >= 3);
-  }, [username]);
-  
+
+  const trimmedName = username.replace(/\s+/g, ' ').trim();
+  const isValid = trimmedName.length >= 3;
+
   const handleJoinLobby = (e) => {
     e.preventDefault();
-    
+
     if (isValid) {
-      // Armazenar nome do usuário no localStorage
-      localStorage.setItem('username', username);
+      localStorage.setItem('username', trimmedName);
       navigate('/lobby');
     }
   };
@@ -210,6 +197,8 @@ const Home = () => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             minLength={3}
+            maxLength={20}
+            aria-label="Seu nome"
             required
           />
           

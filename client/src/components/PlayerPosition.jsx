@@ -1,228 +1,127 @@
 import React from 'react';
-import styled, { keyframes, css } from 'styled-components';
+import styled, { css } from 'styled-components';
+import { CardBack } from './PlayingCard';
 
-const fadeIn = keyframes`
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-`;
+const seatPositions = {
+  bottom: css`
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  `,
+  top: css`
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  `,
+  left: css`
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  `,
+  right: css`
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  `
+};
 
-const slideUp = keyframes`
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-`;
-
-const pulse = keyframes`
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.3);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-`;
-
-const glow = keyframes`
-  0% {
-    box-shadow: 0 0 5px #B22222;
-  }
-  50% {
-    box-shadow: 0 0 20px #B22222;
-  }
-  100% {
-    box-shadow: 0 0 5px #B22222;
-  }
-`;
-
-const PlayerContainer = styled.div`
+const Seat = styled.div`
   position: absolute;
+  ${props => seatPositions[props.$seat]}
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  animation: ${fadeIn} 0.5s ease;
-  left: 20px;
-  
-  &.player-0 {
-    bottom: 20px;
-  }
-  
-  &.player-1 {
-    top: 20px;
-  }
-  
-  &.player-2 {
-    top: 50%;
-    transform: translateY(-50%);
-  }
-  
-  &.player-3 {
-    bottom: 50%;
-    transform: translateY(50%);
-  }
+  gap: 6px;
 `;
 
-const PlayerInfo = styled.div`
-  background: ${props => props.isCurrentPlayer 
-    ? 'linear-gradient(to bottom, rgba(255, 215, 0, 0.8), rgba(184, 134, 11, 0.8))'
-    : 'linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(40, 40, 40, 0.7))'};
-  padding: 8px 15px;
+const Info = styled.div`
+  min-width: 120px;
+  padding: 6px 12px;
   border-radius: 10px;
-  margin-bottom: 15px;
-  min-width: 140px;
   text-align: center;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-  border: 1px solid ${props => props.isCurrentPlayer ? '#FFD700' : 'rgba(255, 255, 255, 0.2)'};
-  animation: ${slideUp} 0.5s ease;
+  color: ${props => (props.$turn ? '#1b1b1b' : '#fff')};
+  background: ${props => (props.$turn
+    ? 'linear-gradient(to bottom, rgba(255, 215, 0, 0.95), rgba(184, 134, 11, 0.95))'
+    : 'linear-gradient(to bottom, rgba(0, 0, 0, 0.75), rgba(40, 40, 40, 0.75))')};
+  border: 1px solid ${props => (props.$turn ? '#ffd700' : 'rgba(255, 255, 255, 0.2)')};
+  box-shadow: ${props => (props.$turn ? '0 0 14px rgba(255, 215, 0, 0.7)' : '0 3px 6px rgba(0, 0, 0, 0.3)')};
+  opacity: ${props => (props.$offline ? 0.55 : 1)};
+
+  @media (max-width: 520px) {
+    min-width: 72px;
+    padding: 4px 8px;
+  }
 `;
 
-const PlayerScore = styled.div`
-  font-size: 1.2rem;
+const Name = styled.div`
   font-weight: bold;
-  color: #FFD700;
-  margin-bottom: 5px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-size: 1rem;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @media (max-width: 520px) {
+    font-size: 0.85rem;
+    max-width: 84px;
+  }
 `;
 
-const PlayerName = styled.div`
-  font-weight: bold;
-  font-size: 1.1rem;
-  color: ${props => props.isCurrentPlayer ? '#000' : '#fff'};
-  margin-bottom: 5px;
-  text-shadow: ${props => props.isCurrentPlayer ? '0 1px 2px rgba(0, 0, 0, 0.3)' : 'none'};
-`;
-
-const PlayerStatus = styled.div`
-  font-size: 0.9rem;
-  color: ${props => props.isCurrentPlayer ? '#000' : 'rgba(255, 255, 255, 0.8)'};
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-`;
-
-const TeamIndicator = styled.div`
+const TeamDot = styled.span`
+  display: inline-block;
   width: 10px;
   height: 10px;
+  margin-right: 6px;
   border-radius: 50%;
-  background-color: ${props => props.team === 1 ? '#4169E1' : '#B22222'};
-  display: inline-block;
-  margin-right: 5px;
+  background: ${props => (props.$mine ? '#4169e1' : '#b22222')};
+  border: 1px solid rgba(255, 255, 255, 0.6);
 `;
 
-const TurnIndicator = styled.div`
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 10px solid #FFD700;
-  animation: ${fadeIn} 0.3s ease;
-`;
-
-const RoundWinMarker = styled.div`
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background-color: ${props => props.won ? '#B22222' : 'rgba(255, 255, 255, 0.3)'};
-  margin: 0 5px;
-  display: inline-block;
-  box-shadow: ${props => props.won ? '0 0 10px #B22222' : 'none'};
-  ${props => props.won && css`
-    animation: ${pulse} 1s infinite, ${glow} 1.5s infinite;
-  `}
-  border: 2px solid ${props => props.won ? '#B22222' : 'rgba(255, 255, 255, 0.5)'};
-  transition: all 0.3s ease;
-  position: relative;
-
-  &::after {
-    content: '${props => props.roundNumber}';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: ${props => props.won ? '#fff' : 'rgba(255, 255, 255, 0.5)'};
-    font-size: 10px;
-    font-weight: bold;
-  }
-`;
-
-const RoundWinIndicators = styled.div`
+const Tags = styled.div`
   display: flex;
   justify-content: center;
-  gap: 10px;
-  margin-top: 5px;
-  padding: 5px;
-  background-color: rgba(0, 0, 0, 0.7);
-  border-radius: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  min-height: 1em;
 `;
 
-const PlayerPosition = ({ 
-  player, 
-  position, 
-  children,
-  teams 
-}) => {
-  if (!player) return null;
-  
-  const team = player.team;
-  const teamData = teams?.find(t => t.id === team);
-  
-  console.log('PlayerPosition render:', {
-    playerName: player.name,
-    team,
-    teamData,
-    roundsWon: teamData?.roundsWon,
-    score: teamData?.score,
-    allTeams: teams,
-    markers: {
-      first: teamData?.roundsWon === 1,
-      second: teamData?.roundsWon === 2
-    }
-  });
-  
+const Tag = styled.span`
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: ${props => props.$bg || 'rgba(255, 255, 255, 0.2)'};
+  color: ${props => props.$color || 'inherit'};
+`;
+
+const MiniHand = styled.div`
+  display: flex;
+  gap: 3px;
+`;
+
+const PlayerPosition = ({ player, seat, isMe, myTeam, isStarter, isTurn }) => {
+  const mine = player.team === myTeam;
+
   return (
-    <PlayerContainer className={`player-${position}`}>
-      <PlayerInfo isCurrentPlayer={player.isCurrentPlayer}>
-        {player.isCurrentPlayer && <TurnIndicator />}
-        <PlayerScore>{teamData?.score || 0} pontos</PlayerScore>
-        <PlayerName isCurrentPlayer={player.isCurrentPlayer}>
-          <TeamIndicator team={team} />
-          {player.name}
-        </PlayerName>
-        <RoundWinIndicators>
-          <RoundWinMarker 
-            won={teamData?.roundsWon >= 1} 
-            roundNumber={1}
-          />
-          <RoundWinMarker 
-            won={teamData?.roundsWon >= 2} 
-            roundNumber={2}
-          />
-        </RoundWinIndicators>
-        <PlayerStatus isCurrentPlayer={player.isCurrentPlayer}>
-          {player.isCurrentPlayer ? 'Sua vez!' : ''}
-        </PlayerStatus>
-      </PlayerInfo>
-      {children}
-    </PlayerContainer>
+    <Seat $seat={seat} aria-label={`Jogador ${player.name}`}>
+      <Info $turn={isTurn} $offline={!player.connected}>
+        <Name title={player.name}>
+          <TeamDot $mine={mine} />
+          {player.name}{isMe ? ' (você)' : ''}
+        </Name>
+        <Tags>
+          {isTurn && <Tag $bg="rgba(0,0,0,0.25)">{isMe ? 'Sua vez!' : 'Vez dele'}</Tag>}
+          {isStarter && <Tag>Mão</Tag>}
+          {player.isBot && <Tag $bg="#4682b4" $color="#fff">bot</Tag>}
+          {!player.connected && <Tag $bg="#b22222" $color="#fff">offline</Tag>}
+        </Tags>
+      </Info>
+      {!isMe && player.handCount > 0 && (
+        <MiniHand aria-label={`${player.handCount} cartas na mão`}>
+          {Array.from({ length: player.handCount }, (_, i) => <CardBack key={i} />)}
+        </MiniHand>
+      )}
+    </Seat>
   );
 };
 

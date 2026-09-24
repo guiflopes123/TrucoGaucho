@@ -1,9 +1,11 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import styled from 'styled-components';
 import Home from './pages/Home';
-import Lobby from './pages/Lobby';
-import GameRoom from './pages/GameRoom';
+
+// Lobby e sala de jogo só são baixados quando o jogador chega nelas.
+const Lobby = lazy(() => import('./pages/Lobby'));
+const GameRoom = lazy(() => import('./pages/GameRoom'));
 
 const AppContainer = styled.div`
   display: flex;
@@ -13,14 +15,25 @@ const AppContainer = styled.div`
   color: #fff;
 `;
 
+const Loading = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+`;
+
 function App() {
   return (
     <AppContainer>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/lobby" element={<Lobby />} />
-        <Route path="/room/:roomId" element={<GameRoom />} />
-      </Routes>
+      <Suspense fallback={<Loading role="status">Carregando...</Loading>}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/lobby" element={<Lobby />} />
+          <Route path="/room/:roomId" element={<GameRoom />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </AppContainer>
   );
 }

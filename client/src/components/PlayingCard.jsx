@@ -1,232 +1,124 @@
-import React, { useState, useEffect } from 'react';
-import styled, { keyframes, css } from 'styled-components';
-
-const flipAnimation = keyframes`
-  0% {
-    transform: rotateY(0deg);
-  }
-  100% {
-    transform: rotateY(180deg);
-  }
-`;
+import React from 'react';
+import styled, { css, keyframes } from 'styled-components';
 
 const dealAnimation = keyframes`
-  0% {
-    transform: translateY(-100px) rotate(5deg);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
-  }
+  from { transform: translateY(-60px) rotate(5deg); opacity: 0; }
+  to { transform: translateY(0) rotate(0deg); opacity: 1; }
 `;
 
-const hoverAnimation = keyframes`
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-15px);
-  }
-`;
+const FACE_LABELS = { 1: 'A', 10: 'Q', 11: 'J', 12: 'K' };
+const SUIT_SYMBOLS = { copas: '♥', ouros: '♦', paus: '♣', espadas: '♠' };
+const SUIT_NAMES = { copas: 'copas', ouros: 'ouros', paus: 'paus', espadas: 'espadas' };
 
-const CardContainer = styled.div`
-  width: 90px;
-  height: 130px;
-  perspective: 1000px;
-  margin: 0 -10px;
-  transition: transform 0.3s ease;
-  animation: ${props => props.isPlayable ? dealAnimation : 'none'} 0.5s ease forwards;
-  animation-delay: ${props => props.isPlayable ? props.index * 0.1 : 0}s;
-  opacity: ${props => props.isPlayable ? 1 : 1};
-  transform: ${props => props.isSelected ? 'translateY(-15px)' : 'translateY(0)'};
-  
-  &:hover {
-    z-index: 10;
-    ${props => props.isPlayable && css`
-      transform: translateY(-15px);
-    `}
-  }
-`;
+const sizeStyles = {
+  md: css`
+    width: var(--card-w, 84px);
+    height: var(--card-h, 120px);
+  `,
+  sm: css`
+    width: calc(var(--card-w, 84px) * 0.5);
+    height: calc(var(--card-h, 120px) * 0.5);
+  `
+};
 
-const CardInner = styled.div`
+const CardBase = styled.div`
+  ${props => sizeStyles[props.$size] || sizeStyles.md}
   position: relative;
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
   border-radius: 10px;
-  cursor: ${props => props.isPlayable ? 'pointer' : 'default'};
-  
-  ${props => props.flipped && `
-    animation: ${flipAnimation} 0.6s forwards;
-  `}
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
 `;
 
-const CardFace = styled.div`
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  border-radius: 10px;
+const CardFront = styled(CardBase).attrs(props => ({
+  as: props.$playable ? 'button' : 'div'
+}))`
+  background-color: white;
+  color: ${props => (props.$red ? '#d40000' : '#000')};
+  border: 1px solid #ccc;
+  padding: 3px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 3px;
-  box-sizing: border-box;
+  font-family: inherit;
+  cursor: ${props => (props.$playable ? 'pointer' : 'default')};
+  transition: transform 0.2s ease;
+  ${props => props.$animate && css`
+    animation: ${dealAnimation} 0.5s ease both;
+    animation-delay: ${props.$index * 0.1}s;
+  `}
+  ${props => props.$manilha && css`
+    border: 3px solid gold;
+    box-shadow: 0 0 10px gold;
+  `}
+  ${props => props.$highlight && css`
+    border: 3px solid #4caf50;
+    box-shadow: 0 0 18px 4px rgba(76, 175, 80, 0.85);
+  `}
+  ${props => props.$playable && css`
+    &:hover, &:focus-visible {
+      transform: translateY(-14px);
+      z-index: 10;
+    }
+    &:focus-visible {
+      outline: 3px solid #ffd700;
+      outline-offset: 2px;
+    }
+  `}
 `;
 
-const CardFront = styled(CardFace)`
-  background-color: white;
-  color: ${props => props.isRed ? '#D40000' : '#000000'};
-  border: 1px solid #ccc;
-`;
-
-const CardBack = styled(CardFace)`
-  background-color: #006400;
-  background-image: repeating-linear-gradient(
-    45deg,
-    #004d00,
-    #004d00 10px,
-    #006400 10px,
-    #006400 20px
-  );
-  transform: rotateY(180deg);
-  border: 1px solid #004d00;
-  
-  &:after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60px;
-    height: 60px;
-    background-color: rgba(255, 215, 0, 0.7);
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-weight: bold;
-    font-size: 1.5rem;
-    color: #006400;
-  }
-`;
-
-const CardCorner = styled.div`
+const Corner = styled.div`
   display: flex;
   flex-direction: column;
-  align-items: ${props => props.position === 'top' ? 'flex-start' : 'flex-end'};
+  align-items: ${props => (props.$bottom ? 'flex-end' : 'flex-start')};
   font-weight: bold;
-  font-size: 1.2rem;
-  padding: 2px;
-  width: 100%;
-  box-sizing: border-box;
+  line-height: 1;
+  font-size: calc(var(--card-w, 84px) * 0.2);
+  ${props => props.$bottom && 'transform: rotate(180deg);'}
 `;
 
-const CardCenter = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 2rem;
-  flex-grow: 1;
-  width: 100%;
-  box-sizing: border-box;
-`;
-
-const CardValue = styled.span`
-  font-size: ${props => props.value === '10' ? '0.9rem' : '1rem'};
+const Center = styled.div`
+  text-align: center;
+  font-size: calc(var(--card-w, 84px) * 0.42);
   line-height: 1;
 `;
 
-const CardSuit = styled.span`
-  font-size: 1rem;
-  line-height: 1;
+const Back = styled(CardBase)`
+  background-color: #006400;
+  background-image: repeating-linear-gradient(45deg, #004d00, #004d00 10px, #006400 10px, #006400 20px);
+  border: 2px solid #ffd700;
 `;
 
-const ManilhaIndicator = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-  border: 3px solid gold;
-  box-shadow: 0 0 10px gold;
-  pointer-events: none;
-`;
+export const CardBack = ({ size = 'sm' }) => <Back $size={size} aria-hidden="true" />;
 
-const PlayingCard = ({ card, isPlayable, onClick, faceDown, index = 0, isManilha = false }) => {
-  const [isSelected, setIsSelected] = useState(false);
+const PlayingCard = ({ card, isPlayable = false, onClick, index = 0, size = 'md', highlight = false }) => {
+  if (!card) return null;
 
-  // Resetar o estado quando a carta muda
-  useEffect(() => {
-    setIsSelected(false);
-  }, [card]);
+  const label = FACE_LABELS[card.value] || card.value;
+  const symbol = SUIT_SYMBOLS[card.suit] || '';
+  const description = `${label} de ${SUIT_NAMES[card.suit] || card.suit}${card.isManilha ? ' (manilha)' : ''}${highlight ? ' — venceu a rodada' : ''}`;
 
   const handleClick = () => {
-    if (!isPlayable) return;
-
-    // Jogar a carta com um único clique
-      onClick(card, index);
+    if (isPlayable && onClick) onClick(card);
   };
 
-  // Mapear valores numéricos para representações de cartas
-  const getDisplayValue = (value) => {
-    switch (value) {
-      case '1': return 'A';
-      case '10': return '10';
-      case '11': return 'J';
-      case '12': return 'Q';
-      default: return value;
-    }
-  };
-  
-  // Mapear naipes para símbolos
-  const getSuitSymbol = (suit) => {
-    switch (suit) {
-      case 'copas': return '♥';
-      case 'ouros': return '♦';
-      case 'paus': return '♣';
-      case 'espadas': return '♠';
-      default: return '';
-    }
-  };
-  
-  if (!card) return null;
-  
-  const isRed = card.suit === 'copas' || card.suit === 'ouros';
-  const displayValue = getDisplayValue(card.value);
-  const suitSymbol = getSuitSymbol(card.suit);
-  
   return (
-    <CardContainer 
-      onClick={handleClick} 
-      isPlayable={isPlayable}
-      isSelected={isSelected}
-      index={index}
+    <CardFront
+      $size={size}
+      $red={card.suit === 'copas' || card.suit === 'ouros'}
+      $playable={isPlayable}
+      $manilha={card.isManilha}
+      $highlight={highlight}
+      $animate={isPlayable}
+      $index={index}
+      type={isPlayable ? 'button' : undefined}
+      onClick={isPlayable ? handleClick : undefined}
+      aria-label={isPlayable ? `Jogar ${description}` : description}
     >
-      <CardInner flipped={faceDown}>
-        <CardFront isRed={isRed}>
-          <CardCorner position="top">
-            <CardValue value={displayValue}>{displayValue}</CardValue>
-            <CardSuit>{suitSymbol}</CardSuit>
-          </CardCorner>
-          <CardCenter>
-            {suitSymbol}
-          </CardCenter>
-          <CardCorner position="bottom">
-            <CardValue value={displayValue}>{displayValue}</CardValue>
-            <CardSuit>{suitSymbol}</CardSuit>
-          </CardCorner>
-          {isManilha && <ManilhaIndicator />}
-        </CardFront>
-        <CardBack />
-      </CardInner>
-    </CardContainer>
+      <Corner><span>{label}</span><span>{symbol}</span></Corner>
+      <Center>{symbol}</Center>
+      <Corner $bottom><span>{label}</span><span>{symbol}</span></Corner>
+    </CardFront>
   );
 };
 

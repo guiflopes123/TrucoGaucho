@@ -1,105 +1,204 @@
 const assert = require('assert');
-const http = require('http');
-const { Server } = require('socket.io');
 const gameController = require('../controllers/gameController');
 const ioModule = require('../socket/io');
+const { C, wait } = require('./helpers');
 
-describe('Game Controller Socket Events', () => {
-  let server;
-  let io;
-  let mockSocket;
-  let emittedEvents = [];
+describe('gameController', () => {
+  let emitted;
 
   beforeEach(() => {
-    // Reset game rooms before each test
+    gameController.gameRooms.forEach(room => room.game.dispose());
     gameController.gameRooms.clear();
-    emittedEvents = [];
+    emitted = [];
 
-    // Mock Socket.IO emitter
-    const mockIo = {
-      to: (roomId) => ({
-        emit: (event, data) => {
-          emittedEvents.push({ event, data, roomId });
-        }
-      }),
-      emit: (event, data) => {
-        emittedEvents.push({ event, data });
-      }
-    };
-    ioModule.init(mockIo);
+    ioModule.init({
+      to: (channel) => ({ emit: (event, data) => emitted.push({ channel, event, data }) }),
+      emit: (event, data) => emitted.push({ channel: null, event, data })
+    });
   });
 
-  const createAndSetupRoom = (playerIds) => {
-    const room = gameController.createRoom('test_room', playerIds.length);
-    playerIds.forEach((id, index) => {
-      gameController.addPlayerToRoom(room.id, id, `Player ${index + 1}`);
-    });
-    playerIds.forEach(id => {
-      gameController.setPlayerReady(room.id, id);
-    });
+  const startRoom = (playerIds) => {
+    const room = gameController.createRoom('sala', playerIds.length);
+    playerIds.forEach((id, i) => gameController.addPlayerToRoom(room.id, id, `Jogador ${i + 1}`));
+    playerIds.forEach(id => gameController.setPlayerReady(room.id, id));
+    room.game.roundDelayMs = 1;
+    emitted = [];
     return room;
   };
 
-  it('deve emitir "game_state_updated" e "truco_requested" ao pedir truco', () => {
-    const player1Id = 'player1_socket_id';
-    const player2Id = 'player2_socket_id';
-    const room = createAndSetupRoom([player1Id, player2Id]);
+  describe('salas', () => {
+    it('gera ids de sala únicos mesmo quando criadas no mesmo instante', () => {
+      const ids = new Set();
+      for (let i = 0; i < 50; i++) ids.add(gameController.createRoom(`sala ${i}`, 2).id);
+      assert.strictEqual(ids.size, 50);
+    });
 
-    gameController.requestTruco(room.id, player1Id);
+    it('recusa número de jogadores inválido', () => {
+      assert.throws(() => gameController.createRoom('x', NaN));
+      assert.throws(() => gameController.createRoom('x', 3));
+    });
 
-    const gameStateUpdatedEvent = emittedEvents.find(e => e.event === 'game_state_updated');
-    const trucoRequestedEvent = emittedEvents.find(e => e.event === 'truco_requested');
+    it('limita a quantidade de salas', () => {
+      for (let i = 0; i < 200; i++) gameController.createRoom(`sala ${i}`, 2);
+      assert.throws(() => gameController.createRoom('extra', 2), /Limite de salas/);
+    });
 
-    assert(gameStateUpdatedEvent, 'O evento "game_state_updated" não foi emitido');
-    assert(trucoRequestedEvent, 'O evento "truco_requested" não foi emitido');
-    assert.strictEqual(trucoRequestedEvent.data.trucoState.level, 'truco');
+    it('a visão pública da sala não expõe o jogo, o baralho nem as cartas', () => {
+      const room = startRoom(['a', 'b']);
+      const json = JSON.stringify(gameController.toPublicRoom(room));
+
+      assert.ok(!json.includes('deck'));
+      assert.ok(!json.includes('hand'));
+      assert.ok(!json.includes('"game"'));
+      assert.strictEqual(gameController.toPublicRoom(room).players.length, 2);
+    });
+
+    it('lista salas com contagem de jogadores e status', () => {
+      const room = gameController.createRoom('Minha sala', 4);
+      gameController.addPlayerToRoom(room.id, 'a', 'A');
+      assert.deepStrictEqual(gameController.getAllRooms(), [
+        { id: room.id, name: 'Minha sala', players: 1, maxPlayers: 4, status: 'waiting', hasPassword: false, bots: 0 }
+      ]);
+    });
+
+    it('entrar de novo com o mesmo id é idempotente e não duplica o jogador', () => {
+      const room = gameController.createRoom('sala', 2);
+      gameController.addPlayerToRoom(room.id, 'a', 'A');
+      const again = gameController.addPlayerToRoom(room.id, 'a', 'A');
+
+      assert.strictEqual(again.success, true);
+      assert.strictEqual(room.players.length, 1);
+    });
+
+    it('não aceita jogador novo com a partida em andamento nem sala cheia', () => {
+      const room = startRoom(['a', 'b']);
+      assert.strictEqual(gameController.addPlayerToRoom(room.id, 'c', 'C').success, false);
+    });
+
+    it('remove a sala e libera os timers quando o último jogador sai', () => {
+      const room = gameController.createRoom('sala', 2);
+      gameController.addPlayerToRoom(room.id, 'a', 'A');
+      const result = gameController.removePlayerFromRoom(room.id, 'a');
+
+      assert.strictEqual(result.roomDeleted, true);
+      assert.strictEqual(gameController.getRoom(room.id), undefined);
+    });
+
+    it('remove salas vazias esquecidas depois do prazo', () => {
+      const room = gameController.createRoom('sala', 2);
+      room.createdAt = Date.now() - 10 * 60 * 1000;
+      gameController.checkEmptyRooms();
+      assert.strictEqual(gameController.getRoom(room.id), undefined);
+    });
   });
 
-  it('deve emitir "game_state_updated" e "retruco_requested" ao pedir retruco', () => {
-    const player1Id = 'player1_socket_id';
-    const player2Id = 'player2_socket_id';
-    const room = createAndSetupRoom([player1Id, player2Id]);
+  describe('estado enviado a cada jogador', () => {
+    it('cada jogador recebe o estado no seu canal privado, só com a própria mão', () => {
+      const room = startRoom(['a', 'b']);
+      gameController.broadcastState(room.id);
 
-    gameController.requestTruco(room.id, player1Id);
-    emittedEvents = []; // Clear events after initial truco
-    gameController.requestRetruco(room.id, player2Id);
+      const updates = emitted.filter(e => e.event === 'game_state_updated');
+      assert.strictEqual(updates.length, 2);
 
-    const gameStateUpdatedEvent = emittedEvents.find(e => e.event === 'game_state_updated');
-    const retrucoRequestedEvent = emittedEvents.find(e => e.event === 'retruco_requested');
+      updates.forEach(update => {
+        const viewerId = update.channel.replace('player:', '');
+        update.data.gameState.players.forEach(p => {
+          assert.strictEqual(p.hand.length, p.id === viewerId ? 3 : 0);
+        });
+      });
+    });
 
-    assert(gameStateUpdatedEvent, 'O evento "game_state_updated" não foi emitido');
-    assert(retrucoRequestedEvent, 'O evento "retruco_requested" não foi emitido');
-    assert.strictEqual(retrucoRequestedEvent.data.retrucoState.level, 'retruco');
+    it('nunca emite o estado para o canal da sala inteira', () => {
+      const room = startRoom(['a', 'b']);
+      const card = room.game.players[0].hand[0];
+      gameController.playCard(room.id, 'a', { value: card.value, suit: card.suit });
+
+      const roomWide = emitted.filter(e => e.event === 'game_state_updated' && e.channel === room.id);
+      assert.strictEqual(roomWide.length, 0);
+    });
+
+    it('as ações bem sucedidas retransmitem o estado; as recusadas não', () => {
+      const room = startRoom(['a', 'b']);
+
+      assert.strictEqual(gameController.requestTruco(room.id, 'b').success, false);
+      assert.strictEqual(emitted.length, 0);
+
+      assert.strictEqual(gameController.requestTruco(room.id, 'a').success, true);
+      assert.strictEqual(emitted.filter(e => e.event === 'game_state_updated').length, 2);
+    });
+
+    it('retransmite o estado quando a mesa é limpa depois da rodada (timer interno)', async () => {
+      const room = startRoom(['a', 'b']);
+      room.game.players[0].hand = [C('3', 'copas'), C('2', 'copas'), C('4', 'paus')];
+      room.game.players[1].hand = [C('4', 'copas'), C('5', 'copas'), C('6', 'copas')];
+
+      gameController.playCard(room.id, 'a', { value: '3', suit: 'copas' });
+      gameController.playCard(room.id, 'b', { value: '4', suit: 'copas' });
+      emitted = [];
+
+      await wait();
+      const updates = emitted.filter(e => e.event === 'game_state_updated');
+      assert.strictEqual(updates.length, 2);
+      assert.strictEqual(updates[0].data.gameState.playedCards.length, 0);
+    });
+
+    it('ações em sala inexistente ou fora de partida falham sem lançar exceção', () => {
+      assert.strictEqual(gameController.requestTruco('nao-existe', 'a').success, false);
+
+      const room = gameController.createRoom('sala', 2);
+      gameController.addPlayerToRoom(room.id, 'a', 'A');
+      assert.strictEqual(gameController.requestTruco(room.id, 'a').message, 'O jogo não está em andamento');
+      assert.doesNotThrow(() => gameController.requestContraFlor(room.id, 'a'));
+      assert.doesNotThrow(() => gameController.respondToFlor(room.id, 'a', true));
+    });
   });
 
-  it('deve emitir "game_state_updated" e "vale4_requested" ao pedir vale 4', () => {
-    const player1Id = 'player1_socket_id';
-    const player2Id = 'player2_socket_id';
-    const room = createAndSetupRoom([player1Id, player2Id]);
+  describe('desconexão e reconexão', () => {
+    const originalGrace = { ...gameController.RECONNECT_GRACE_MS };
+    afterEach(() => Object.assign(gameController.RECONNECT_GRACE_MS, originalGrace));
 
-    gameController.requestTruco(room.id, player1Id);
-    gameController.requestRetruco(room.id, player2Id);
-    emittedEvents = []; // Clear events after retruco
-    gameController.requestVale4(room.id, player1Id);
+    it('marca o jogador como desconectado e avisa a sala', () => {
+      const room = startRoom(['a', 'b']);
+      gameController.handlePlayerDisconnected('a');
 
-    const gameStateUpdatedEvent = emittedEvents.find(e => e.event === 'game_state_updated');
-    const vale4RequestedEvent = emittedEvents.find(e => e.event === 'vale4_requested');
+      assert.strictEqual(room.game.players[0].connected, false);
+      const state = emitted.find(e => e.event === 'game_state_updated');
+      assert.strictEqual(state.data.gameState.players.find(p => p.id === 'a').connected, false);
+      assert.ok(emitted.some(e => e.event === 'game_notice' && /conexão/.test(e.data.message)));
+    });
 
-    assert(gameStateUpdatedEvent, 'O evento "game_state_updated" não foi emitido');
-    assert(vale4RequestedEvent, 'O evento "vale4_requested" não foi emitido');
-    assert.strictEqual(vale4RequestedEvent.data.vale4State.level, 'vale4');
-  });
+    it('reconectar dentro do prazo cancela a remoção', async () => {
+      gameController.RECONNECT_GRACE_MS.playing = 20;
+      const room = startRoom(['a', 'b']);
 
-  it('deve emitir "game_state_updated" ao responder ao truco', () => {
-    const player1Id = 'player1_socket_id';
-    const player2Id = 'player2_socket_id';
-    const room = createAndSetupRoom([player1Id, player2Id]);
+      gameController.handlePlayerDisconnected('a');
+      gameController.handlePlayerReconnected('a');
+      await wait(60);
 
-    gameController.requestTruco(room.id, player1Id);
-    emittedEvents = []; // Clear events
-    gameController.respondToTruco(room.id, player2Id, true);
+      assert.strictEqual(room.game.players.length, 2);
+      assert.strictEqual(room.game.players[0].connected, true);
+      assert.strictEqual(room.game.gameStatus, 'playing');
+    });
 
-    const gameStateUpdatedEvent = emittedEvents.find(e => e.event === 'game_state_updated');
-    assert(gameStateUpdatedEvent, 'O evento "game_state_updated" não foi emitido ao responder ao truco');
+    it('sem reconexão o jogador é removido, o adversário vence por W.O. e todos são avisados', async () => {
+      gameController.RECONNECT_GRACE_MS.playing = 20;
+      const room = startRoom(['a', 'b']);
+      let removedNotified = null;
+
+      gameController.handlePlayerDisconnected('a', (playerId) => { removedNotified = playerId; });
+      await wait(60);
+
+      assert.strictEqual(removedNotified, 'a');
+      assert.strictEqual(room.game.players.length, 1);
+      assert.strictEqual(room.game.gameStatus, 'finished');
+      assert.strictEqual(room.game.gameWinner.id, 2);
+      assert.ok(emitted.some(e => e.event === 'game_notice' && /removido/.test(e.data.message)));
+    });
+
+    it('encontra a sala de um jogador para restaurar a sessão', () => {
+      const room = startRoom(['a', 'b']);
+      assert.strictEqual(gameController.findRoomByPlayer('a').id, room.id);
+      assert.strictEqual(gameController.findRoomByPlayer('desconhecido'), null);
+    });
   });
 });

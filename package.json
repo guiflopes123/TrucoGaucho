@@ -1,12 +1,18 @@
 {
   "name": "truco-gaucho",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
+  "description": "Truco Gaúcho Online: cliente React (Vite) e servidor Node.js com Socket.IO",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "test": "npm --prefix server test && npm --prefix client test",
+    "test:e2e": "node e2e/run.js",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint && node server/node_modules/eslint/bin/eslint.js -c e2e/eslint.config.js e2e"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "description": ""
+  "license": "ISC"
 }

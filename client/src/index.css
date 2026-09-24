@@ -1,8 +1,27 @@
+:root {
+  --card-w: 84px;
+  --card-h: 120px;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --card-w: 62px;
+    --card-h: 89px;
+  }
+}
+
+@media (max-width: 420px) {
+  :root {
+    --card-w: 52px;
+    --card-h: 74px;
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Roboto', sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 body {
@@ -23,6 +42,11 @@ button:hover {
   opacity: 0.9;
 }
 
+button:focus-visible {
+  outline: 3px solid #ffd700;
+  outline-offset: 2px;
+}
+
 input {
   padding: 10px;
   border: 1px solid #ccc;
@@ -33,4 +57,14 @@ input {
 a {
   text-decoration: none;
   color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

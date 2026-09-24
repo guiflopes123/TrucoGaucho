@@ -1,465 +1,222 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import API_URL from '../config/api';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
+import API_URL from '../config/api';
+import { getSessionToken } from '../utils/session';
+import { playSound } from '../utils/sound';
 
-// Criar o contexto do Socket
-const SocketContext = createContext();
+const SocketContext = createContext(null);
 
-// Provedor do Socket
+const NOTICE_TTL_MS = 6000;
+const MAX_NOTICES = 4;
+const MAX_CHAT_MESSAGES = 100;
+const ACK_TIMEOUT_MS = 5000;
+
+// Única fonte da verdade do cliente: conexão, sala atual, estado da partida, chat e avisos.
+// Os componentes só leem daqui e disparam ações; não registram listeners no socket.
 export const SocketProvider = ({ children }) => {
-  const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
+  const currentRoomRef = useRef(null);
+  const noticeTimers = useRef(new Set());
+  const noticeSeq = useRef(0);
+
   const [connected, setConnected] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [playerId, setPlayerId] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(null);
   const [gameState, setGameState] = useState(null);
-  const [cards, setCards] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [chat, setChat] = useState([]);
   const [error, setError] = useState(null);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const [isReconnecting, setIsReconnecting] = useState(false);
-  const maxReconnectAttempts = 20;
-  const reconnectDelay = 2000;
 
-  // Inicializar o socket
   useEffect(() => {
-    const newSocket = io(API_URL, {
-      reconnection: true,
-      reconnectionAttempts: maxReconnectAttempts,
-      reconnectionDelay: reconnectDelay,
-      timeout: 60000,
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+
+  useEffect(() => {
+    const socket = io(API_URL, {
+      auth: { token: getSessionToken() },
       transports: ['websocket', 'polling']
     });
-    
-    newSocket.on('connect', () => {
-      console.log('Conectado ao servidor');
-      setConnected(true);
-      setError(null);
-      setReconnectAttempts(0);
-      setIsReconnecting(false);
-      
-      // Tentar reconectar à sala se houver uma sala atual
-      if (currentRoom) {
-        console.log('Tentando reconectar à sala:', currentRoom);
-        // Adicionar um pequeno delay antes de tentar reconectar à sala
-        setTimeout(() => {
-          newSocket.emit('reconnect_to_room', {
-            roomId: currentRoom,
-            timestamp: Date.now()
-          });
-        }, 1000);
-      }
-    });
-    
-    newSocket.on('disconnect', (reason) => {
-      console.log('Desconectado do servidor:', reason);
-      setConnected(false);
-      setIsReconnecting(true);
-      
-      if (reason === 'io server disconnect') {
-        // O servidor desconectou intencionalmente
-        console.log('Tentando reconectar após desconexão do servidor...');
-        newSocket.connect();
-      } else if (reason === 'transport close') {
-        // A conexão foi fechada, tentar reconectar
-        console.log('Conexão fechada, tentando reconectar...');
-        setTimeout(() => {
-          newSocket.connect();
-        }, reconnectDelay);
-      } else if (reason === 'ping timeout') {
-        // Timeout do ping, tentar reconectar
-        console.log('Timeout do ping, tentando reconectar...');
-        setTimeout(() => {
-          newSocket.connect();
-        }, reconnectDelay);
-      }
-    });
-    
-    newSocket.on('connect_error', (err) => {
-      console.error('Erro de conexão:', err);
-      setError('Erro ao conectar ao servidor. Tentando reconectar...');
-    });
-    
-    newSocket.on('reconnect_failed', () => {
-      console.log('Falha na reconexão após várias tentativas');
-      setReconnectAttempts(prev => prev + 1);
-      
-      if (reconnectAttempts >= maxReconnectAttempts) {
-        setIsReconnecting(false);
-        // Notificar o usuário sobre a falha na reconexão
-        alert('Não foi possível reconectar ao servidor. Por favor, atualize a página.');
-      }
-    });
-    
-    newSocket.on('reconnect_to_room_response', (response) => {
-      if (response.success) {
-        console.log('Reconectado à sala com sucesso');
-        setGameState(response.gameState);
-      } else {
-        console.log('Falha ao reconectar à sala:', response.message);
-        // Notificar o usuário sobre a falha na reconexão à sala
-        alert('Não foi possível reconectar à sala do jogo. Por favor, tente entrar novamente.');
-      }
-    });
-    
-    // Eventos de sala
-    newSocket.on('rooms_list', (data) => {
-      setRooms(data.rooms);
-    });
-    
-    newSocket.on('rooms_updated', (data) => {
-      setRooms(data.rooms);
-    });
-    
-    newSocket.on('room_created', (data) => {
-      console.log('Sala criada:', data);
-      setCurrentRoom(data.room);
-      
-      // Atualizar o estado do jogo
-      if (data.gameState) {
-        console.log('Estado do jogo recebido do servidor (criação de sala):', data.gameState);
-        setGameState(data.gameState);
-      } else {
-        console.log('Criando estado inicial do jogo (criação de sala)');
-        setGameState({
-          status: 'waiting',
-          gameStatus: 'waiting',
-          players: data.room.players,
-          teams: [
-            { id: 1, name: 'Time 1', score: 0, roundsWon: 0 },
-            { id: 2, name: 'Time 2', score: 0, roundsWon: 0 }
-          ]
-        });
-      }
-    });
-    
-    newSocket.on('room_joined', (data) => {
-      console.log('Entrou na sala:', data);
-      setCurrentRoom(data.room);
-      
-      // Inicializar o estado do jogo
-      if (data.gameState) {
-        console.log('Estado do jogo recebido do servidor:', data.gameState);
-        setGameState(data.gameState);
-      } else {
-        console.log('Criando estado inicial do jogo');
-        setGameState({
-          status: 'waiting',
-          gameStatus: 'waiting',
-          players: data.room.players,
-          teams: [
-            { id: 1, name: 'Time 1', score: 0, roundsWon: 0 },
-            { id: 2, name: 'Time 2', score: 0, roundsWon: 0 }
-          ]
-        });
-      }
-    });
-    
-    newSocket.on('room_left', () => {
+    socketRef.current = socket;
+    let replaced = false;
+
+    const pushNotice = (message) => {
+      noticeSeq.current += 1;
+      const notice = { id: noticeSeq.current, message };
+      setNotices(prev => [...prev, notice].slice(-MAX_NOTICES));
+
+      const timer = setTimeout(() => {
+        noticeTimers.current.delete(timer);
+        setNotices(prev => prev.filter(n => n.id !== notice.id));
+      }, NOTICE_TTL_MS);
+      noticeTimers.current.add(timer);
+    };
+
+    const clearRoom = () => {
       setCurrentRoom(null);
       setGameState(null);
-      setCards([]);
+      setNotices([]);
+      setChat([]);
+    };
+
+    const enterRoom = ({ room, gameState: state, chat: history }) => {
+      setCurrentRoom(room);
+      setGameState(state);
+      setChat(history || []);
+    };
+
+    socket.on('connect', () => {
+      setConnected(true);
+      setError(null);
     });
-    
-    // Eventos de jogo
-    newSocket.on('game_state_updated', (data) => {
-      console.log('Estado do jogo atualizado:', data);
-      if (data.gameState) {
-        setGameState(data.gameState);
-        
-        // Atualizar as cartas do jogador se disponíveis
-        if (data.gameState.players) {
-          const currentPlayer = data.gameState.players.find(p => p.id === newSocket.id);
-          if (currentPlayer) {
-            if (currentPlayer.hand) {
-              setCards(currentPlayer.hand);
-            }
-            // Atualizar o estado do jogador (pronto/não pronto)
-            if (currentPlayer.isReady !== undefined) {
-              setPlayerReady(currentPlayer.isReady);
-            }
-          }
+
+    socket.on('disconnect', (reason) => {
+      setConnected(false);
+      setSessionReady(false);
+      // Se o servidor encerrou a conexão por outro motivo que não a substituição da sessão,
+      // tentamos voltar; as quedas de rede o próprio socket.io reconecta sozinho.
+      if (reason === 'io server disconnect' && !replaced) socket.connect();
+    });
+
+    socket.on('connect_error', () => {
+      setError('Não foi possível conectar ao servidor. Tentando novamente...');
+    });
+
+    socket.on('session', ({ playerId: id, roomId }) => {
+      setPlayerId(id);
+      setSessionReady(true);
+      if (!roomId) {
+        if (currentRoomRef.current) {
+          setError('Você não está mais na sala: ela foi encerrada, o servidor foi reiniciado ou você ficou tempo demais desconectado.');
         }
+        clearRoom();
       }
     });
-    
-    newSocket.on('cards_dealt', (data) => {
-      if (data.success) {
-        setCards(data.cards);
-      }
+
+    socket.on('session_replaced', () => {
+      replaced = true;
+      setError('Esta sessão foi aberta em outra aba. Feche a outra aba ou recarregue esta página.');
+      clearRoom();
     });
-    
-    newSocket.on('cards_updated', (data) => {
-      if (data.success) {
-        setCards(data.cards);
-      }
+
+    socket.on('rooms_list', ({ rooms: list }) => setRooms(list));
+    socket.on('rooms_updated', ({ rooms: list }) => setRooms(list));
+
+    socket.on('room_created', enterRoom);
+    socket.on('room_joined', enterRoom);
+    socket.on('room_rejoined', enterRoom);
+    socket.on('room_left', clearRoom);
+    socket.on('room_closed', ({ message }) => {
+      clearRoom();
+      setError(message || 'A sala foi encerrada.');
     });
-    
-    // Eventos de Truco
-    newSocket.on('truco_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Truco
-      console.log('Truco pedido por:', data.playerId);
+
+    socket.on('game_state_updated', ({ gameState: state }) => setGameState(state));
+    socket.on('game_notice', ({ message }) => pushNotice(message));
+    socket.on('chat_message', (message) => {
+      setChat(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message].slice(-MAX_CHAT_MESSAGES)));
     });
-    
-    newSocket.on('truco_response_received', (data) => {
-      // Atualizar o estado do jogo com a resposta ao Truco
-      console.log('Resposta ao Truco de:', data.playerId, 'Aceito:', data.accepted);
-    });
-    
-    newSocket.on('retruco_response_received', (data) => {
-      // Atualizar o estado do jogo com a resposta ao Retruco
-      console.log('Resposta ao Retruco de:', data.playerId, 'Aceito:', data.accepted);
-    });
-    
-    newSocket.on('vale4_response_received', (data) => {
-      // Atualizar o estado do jogo com a resposta ao Vale 4
-      console.log('Resposta ao Vale 4 de:', data.playerId, 'Aceito:', data.accepted);
-    });
-    
-    // Eventos de Envido
-    newSocket.on('envido_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Envido
-      console.log('Envido pedido por:', data.playerId);
-    });
-    
-    newSocket.on('real_envido_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Real Envido
-      console.log('Real Envido pedido por:', data.playerId);
-    });
-    
-    newSocket.on('falta_envido_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Falta Envido
-      console.log('Falta Envido pedido por:', data.playerId);
-    });
-    
-    newSocket.on('envido_response_received', (data) => {
-      // Atualizar o estado do jogo com a resposta ao Envido
-      console.log('Resposta ao Envido de:', data.playerId, 'Aceito:', data.accepted);
-      if (data.accepted) {
-        console.log('Time 1 Envido:', data.team1Envido, 'Time 2 Envido:', data.team2Envido);
-        console.log('Time vencedor:', data.winningTeam);
-      }
-    });
-    
-    // Eventos de Flor
-    newSocket.on('flor_declared', (data) => {
-      // Atualizar o estado do jogo para mostrar a declaração de Flor
-      console.log('Flor cantada por:', data.playerId);
-    });
-    
-    newSocket.on('contra_flor_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Contra-Flor
-      console.log('Contra-Flor pedida por:', data.playerId);
-    });
-    
-    newSocket.on('contra_flor_resto_requested', (data) => {
-      // Atualizar o estado do jogo para mostrar o pedido de Contra-Flor e o Resto
-      console.log('Contra-Flor e o Resto pedida por:', data.playerId);
-    });
-    
-    newSocket.on('flor_response_received', (data) => {
-      // Atualizar o estado do jogo com a resposta à Flor
-      console.log('Resposta à Flor de:', data.playerId, 'Aceito:', data.accepted);
-      if (data.accepted) {
-        console.log('Time 1 Flor:', data.team1Flor, 'Time 2 Flor:', data.team2Flor);
-        console.log('Time vencedor:', data.winningTeam);
-      }
-    });
-    
-    // Eventos de erro
-    newSocket.on('error', (data) => {
-      console.error('Erro do servidor:', data.message);
-      setError(data.message);
-    });
-    
-    setSocket(newSocket);
-    
-    // Limpar o socket ao desmontar o componente
+    socket.on('error', ({ message }) => setError(message));
+
+    const timers = noticeTimers.current;
     return () => {
-      newSocket.close();
+      timers.forEach(clearTimeout);
+      timers.clear();
+      socket.removeAllListeners();
+      socket.close();
+      socketRef.current = null;
     };
   }, []);
-  
-  // Obter lista de salas
-  const getRooms = () => {
-    if (socket) {
-      socket.emit('get_rooms');
-    }
-  };
-  
-  // Criar uma sala
-  const createRoom = (roomName, maxPlayers, playerName) => {
-    if (socket) {
-      socket.emit('create_room', { roomName, maxPlayers, playerName });
-    }
-  };
-  
-  // Entrar em uma sala
-  const joinRoom = (roomId, playerName) => {
-    if (socket) {
-      socket.emit('join_room', { roomId, playerName });
-    }
-  };
-  
-  // Sair de uma sala
-  const leaveRoom = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('leave_room', { roomId });
-    }
-  };
-  
-  // Jogar uma carta
-  const playCard = (roomId, card) => {
-    if (socket && currentRoom) {
-      socket.emit('play_card', { roomId, card });
-    }
-  };
-  
-  // Pedir Truco
-  const requestTruco = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('truco', { roomId });
-    }
-  };
-  
-  // Responder ao Truco
-  const respondToTruco = (roomId, accept) => {
-    if (socket && currentRoom) {
-      socket.emit('truco_response', { roomId, accept });
-    }
-  };
 
-  // Pedir Retruco
-  const requestRetruco = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('retruco', { roomId });
+  const emitWithAck = useCallback((event, data = {}, timeoutMs = ACK_TIMEOUT_MS) => new Promise((resolve) => {
+    const socket = socketRef.current;
+    if (!socket || !socket.connected) {
+      resolve({ success: false, message: 'Sem conexão com o servidor' });
+      return;
     }
-  };
+    socket.timeout(timeoutMs).emit(event, data, (err, response) => {
+      resolve(err ? { success: false, message: 'O servidor não respondeu' } : response);
+    });
+  }), []);
 
-  // Responder ao Retruco
-  const respondToRetruco = (roomId, accept) => {
-    if (socket && currentRoom) {
-      socket.emit('retruco_response', { roomId, accept });
-    }
-  };
+  const getRooms = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket && socket.connected) socket.emit('get_rooms');
+  }, []);
 
-  // Pedir Vale 4
-  const requestVale4 = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('vale4', { roomId });
-    }
-  };
-
-  // Responder ao Vale 4
-  const respondToVale4 = (roomId, accept) => {
-    if (socket && currentRoom) {
-      socket.emit('vale4_response', { roomId, accept });
-    }
-  };
-    
-  // Pedir Envido
-  const requestEnvido = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('envido', { roomId });
-    }
-  };
-  
-  // Pedir Real Envido
-  const requestRealEnvido = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('real_envido', { roomId });
-    }
-  };
-  
-  // Pedir Falta Envido
-  const requestFaltaEnvido = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('falta_envido', { roomId });
-    }
-  };
-  
-  // Responder ao Envido
-  const respondToEnvido = (roomId, accept) => {
-    if (socket && currentRoom) {
-      socket.emit('envido_response', { roomId, accept });
-    }
-  };
-  
-  // Cantar Flor
-  const declareFlor = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('flor', { roomId });
-    }
-  };
-  
-  // Pedir Contra-Flor
-  const requestContraFlor = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('contra_flor', { roomId });
-    }
-  };
-  
-  // Pedir Contra-Flor e o Resto
-  const requestContraFlorResto = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('contra_flor_resto', { roomId });
-    }
-  };
-  
-  // Responder à Flor
-  const respondToFlor = (roomId, accept) => {
-    if (socket && currentRoom) {
-      socket.emit('flor_response', { roomId, accept });
-    }
-  };
-  
-  // Marcar jogador como pronto
-  const setPlayerReady = (roomId) => {
-    if (socket && currentRoom) {
-      socket.emit('player_ready', { roomId });
-    }
-  };
-  
-  // Limpar erro
-  const clearError = () => {
-    setError(null);
-  };
-  
-  return (
-    <SocketContext.Provider
-      value={{
-        socket,
-        connected,
-        rooms,
-        currentRoom,
-        gameState,
-        cards,
-        error,
-        getRooms,
-        createRoom,
-        joinRoom,
-        leaveRoom,
-        playCard,
-        requestTruco,
-        respondToTruco,
-        requestRetruco,
-        respondToRetruco,
-        requestVale4,
-        respondToVale4,
-        requestEnvido,
-        requestRealEnvido,
-        requestFaltaEnvido,
-        respondToEnvido,
-        declareFlor,
-        requestContraFlor,
-        requestContraFlorResto,
-        respondToFlor,
-        setPlayerReady,
-        clearError
-      }}
-    >
-      {children}
-    </SocketContext.Provider>
+  const createRoom = useCallback(
+    (roomName, maxPlayers, playerName, password = '') =>
+      emitWithAck('create_room', { roomName, maxPlayers, playerName, password }),
+    [emitWithAck]
   );
+
+  const joinRoom = useCallback(
+    (roomId, playerName, password) => emitWithAck('join_room', { roomId, playerName, password }),
+    [emitWithAck]
+  );
+
+  const leaveRoom = useCallback(async () => {
+    const response = await emitWithAck('leave_room', {}, 3000);
+    setCurrentRoom(null);
+    setGameState(null);
+    setNotices([]);
+    setChat([]);
+    return response;
+  }, [emitWithAck]);
+
+  const setPlayerReady = useCallback(() => emitWithAck('player_ready'), [emitWithAck]);
+  const playAgain = useCallback(() => emitWithAck('play_again'), [emitWithAck]);
+  const addBot = useCallback(() => emitWithAck('add_bot'), [emitWithAck]);
+  const removeBot = useCallback(() => emitWithAck('remove_bot'), [emitWithAck]);
+  const sendChat = useCallback((text) => emitWithAck('chat', { text }), [emitWithAck]);
+
+  // Ações de jogo (play_card, truco, truco_response, envido, flor...). A sala é a do próprio
+  // jogador no servidor; erros chegam pelo evento 'error'.
+  const sendAction = useCallback((event, payload = {}) => emitWithAck(event, payload), [emitWithAck]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  // Som discreto quando chega mensagem de outro jogador.
+  const lastChat = chat[chat.length - 1];
+  const lastChatId = lastChat ? lastChat.id : null;
+  const lastChatFrom = lastChat ? lastChat.playerId : null;
+  useEffect(() => {
+    if (lastChatId && lastChatFrom !== playerId) playSound('chat');
+  }, [lastChatId, lastChatFrom, playerId]);
+
+  const value = useMemo(() => ({
+    connected,
+    sessionReady,
+    playerId,
+    rooms,
+    currentRoom,
+    gameState,
+    notices,
+    chat,
+    error,
+    getRooms,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    setPlayerReady,
+    playAgain,
+    addBot,
+    removeBot,
+    sendChat,
+    sendAction,
+    clearError
+  }), [
+    connected, sessionReady, playerId, rooms, currentRoom, gameState, notices, chat, error,
+    getRooms, createRoom, joinRoom, leaveRoom, setPlayerReady, playAgain, addBot, removeBot,
+    sendChat, sendAction, clearError
+  ]);
+
+  return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };
 
-// Hook para usar o contexto do Socket
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) throw new Error('useSocket deve ser usado dentro de um SocketProvider');
+  return context;
+};

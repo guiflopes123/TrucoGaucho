@@ -1,7 +1,7 @@
 const assert = require('assert');
 const { Card, Deck, Player, Team, TrucoGame } = require('../models/TrucoGame');
+const { C, createStartedGame, play } = require('./helpers');
 
-// Testes para a classe Card
 describe('Card', () => {
   it('deve criar uma carta com os valores corretos', () => {
     const card = new Card('7', 'ouros');
@@ -11,473 +11,272 @@ describe('Card', () => {
   });
 
   it('deve identificar manilhas corretamente', () => {
-    const manilhas = [
-      new Card('7', 'ouros'),
-      new Card('7', 'espadas'),
-      new Card('1', 'paus'),
-      new Card('1', 'espadas')
-    ];
-    
-    const notManilhas = [
-      new Card('7', 'paus'),
-      new Card('7', 'copas'),
-      new Card('1', 'ouros'),
-      new Card('1', 'copas')
-    ];
-    
-    manilhas.forEach(card => {
-      assert.strictEqual(card.isManilha, true);
-    });
-    
-    notManilhas.forEach(card => {
-      assert.strictEqual(card.isManilha, false);
-    });
+    [C('7', 'ouros'), C('7', 'espadas'), C('1', 'paus'), C('1', 'espadas')]
+      .forEach(card => assert.strictEqual(card.isManilha, true));
+    [C('7', 'paus'), C('7', 'copas'), C('1', 'ouros'), C('1', 'copas')]
+      .forEach(card => assert.strictEqual(card.isManilha, false));
   });
 
   it('deve comparar cartas corretamente', () => {
-    const card1 = new Card('3', 'ouros');
-    const card2 = new Card('2', 'paus');
-    const card3 = new Card('7', 'ouros'); // Manilha mais baixa
-    const card4 = new Card('1', 'espadas'); // Manilha mais alta
-    
-    // Carta normal vs carta normal
-    assert.strictEqual(card1.compareWith(card2) > 0, true); // 3 > 2
-    
-    // Manilha vs carta normal
-    assert.strictEqual(card3.compareWith(card1) > 0, true); // Manilha > carta normal
-    
-    // Carta normal vs manilha
-    assert.strictEqual(card1.compareWith(card3) < 0, true); // Carta normal < manilha
-    
-    // Manilha vs manilha
-    assert.strictEqual(card4.compareWith(card3) > 0, true); // 1 de espadas > 7 de ouros
+    const tres = C('3', 'ouros');
+    const dois = C('2', 'paus');
+    const seteOuros = C('7', 'ouros');
+    const asEspadas = C('1', 'espadas');
+
+    assert.ok(tres.compareWith(dois) > 0);
+    assert.ok(seteOuros.compareWith(tres) > 0);
+    assert.ok(tres.compareWith(seteOuros) < 0);
+    assert.ok(asEspadas.compareWith(seteOuros) > 0);
+    assert.strictEqual(C('3', 'copas').compareWith(C('3', 'paus')), 0);
   });
 
   it('deve calcular o valor de Envido corretamente', () => {
-    const card1 = new Card('7', 'ouros');
-    const card2 = new Card('1', 'paus');
-    const card3 = new Card('10', 'copas');
-    
-    assert.strictEqual(card1.getEnvidoValue(), 7);
-    assert.strictEqual(card2.getEnvidoValue(), 1);
-    assert.strictEqual(card3.getEnvidoValue(), 0); // Figuras valem 0
+    assert.strictEqual(C('7', 'ouros').getEnvidoValue(), 7);
+    assert.strictEqual(C('1', 'paus').getEnvidoValue(), 1);
+    assert.strictEqual(C('10', 'copas').getEnvidoValue(), 0);
   });
 });
 
-// Testes para a classe Deck
 describe('Deck', () => {
-  it('deve criar um baralho com 40 cartas', () => {
+  it('deve criar um baralho com 40 cartas sem repetições', () => {
     const deck = new Deck();
     assert.strictEqual(deck.cards.length, 40);
+    assert.strictEqual(new Set(deck.cards.map(c => c.display)).size, 40);
   });
 
   it('deve distribuir o número correto de cartas', () => {
     const deck = new Deck();
-    const hands = deck.deal(4, 3); // 4 jogadores, 3 cartas cada
-    
+    const hands = deck.deal(4, 3);
     assert.strictEqual(hands.length, 4);
-    hands.forEach(hand => {
-      assert.strictEqual(hand.length, 3);
-    });
-    
-    // Verificar se o baralho tem menos 12 cartas (4 jogadores * 3 cartas)
+    hands.forEach(hand => assert.strictEqual(hand.length, 3));
     assert.strictEqual(deck.cards.length, 28);
   });
 });
 
-// Testes para a classe Player
 describe('Player', () => {
-  it('deve calcular o Envido corretamente com cartas do mesmo naipe', () => {
-    const player = new Player('player1', 'Jogador 1', 1);
-    player.hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'paus')
-    ];
-    
-    // 7 + 6 + 20 (mesmo naipe) = 33
+  it('deve calcular o Envido com cartas do mesmo naipe', () => {
+    const player = new Player('a', 'A', 1);
+    player.hand = [C('7', 'ouros'), C('6', 'ouros'), C('1', 'paus')];
     assert.strictEqual(player.calculateEnvido(), 33);
   });
 
-  it('deve calcular o Envido corretamente com cartas de naipes diferentes', () => {
-    const player = new Player('player1', 'Jogador 1', 1);
-    player.hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'paus'),
-      new Card('1', 'copas')
-    ];
-    
-    // Maior carta = 7
+  it('deve calcular o Envido com naipes diferentes usando a maior carta', () => {
+    const player = new Player('a', 'A', 1);
+    player.hand = [C('7', 'ouros'), C('6', 'paus'), C('1', 'copas')];
     assert.strictEqual(player.calculateEnvido(), 7);
   });
 
-  it('deve identificar Flor corretamente', () => {
-    const playerWithFlor = new Player('player1', 'Jogador 1', 1);
-    playerWithFlor.hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'ouros')
-    ];
-    
-    const playerWithoutFlor = new Player('player2', 'Jogador 2', 1);
-    playerWithoutFlor.hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'paus')
-    ];
-    
-    assert.strictEqual(playerWithFlor.hasFlor(), true);
-    assert.strictEqual(playerWithoutFlor.hasFlor(), false);
+  it('deve manter Envido e Flor mesmo depois de jogar cartas', () => {
+    const player = new Player('a', 'A', 1);
+    player.hand = [C('7', 'ouros'), C('6', 'ouros'), C('5', 'ouros')];
+    player.removeFromHand({ value: '7', suit: 'ouros' });
+
+    assert.strictEqual(player.hand.length, 2);
+    assert.strictEqual(player.hasFlor(), true);
+    assert.strictEqual(player.calculateFlor(), 38);
+    assert.strictEqual(player.calculateEnvido(), 33);
   });
 
-  it('deve calcular o valor da Flor corretamente', () => {
-    const player = new Player('player1', 'Jogador 1', 1);
-    player.hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'ouros')
-    ];
-    
-    // 7 + 6 + 1 + 20 (mesmo naipe) = 34
-    assert.strictEqual(player.calculateFlor(), 34);
+  it('deve identificar Flor e calcular seu valor', () => {
+    const withFlor = new Player('a', 'A', 1);
+    withFlor.hand = [C('7', 'ouros'), C('6', 'ouros'), C('1', 'ouros')];
+    const withoutFlor = new Player('b', 'B', 1);
+    withoutFlor.hand = [C('7', 'ouros'), C('6', 'ouros'), C('1', 'paus')];
+
+    assert.strictEqual(withFlor.hasFlor(), true);
+    assert.strictEqual(withoutFlor.hasFlor(), false);
+    assert.strictEqual(withFlor.calculateFlor(), 34);
   });
 });
 
-// Testes para a classe Team
 describe('Team', () => {
-  it('deve adicionar jogadores corretamente', () => {
+  it('deve gerenciar jogadores, pontos e rodadas', () => {
     const team = new Team(1, 'Time 1');
-    const player1 = new Player('player1', 'Jogador 1', 1);
-    const player2 = new Player('player2', 'Jogador 2', 1);
-    
-    team.addPlayer(player1);
-    team.addPlayer(player2);
-    
-    assert.strictEqual(team.players.length, 2);
-    assert.strictEqual(team.players[0], player1);
-    assert.strictEqual(team.players[1], player2);
-  });
-
-  it('deve gerenciar pontuação corretamente', () => {
-    const team = new Team(1, 'Time 1');
-    
+    team.addPlayer(new Player('a', 'A', 1));
+    team.addPlayer(new Player('b', 'B', 1));
     team.addPoints(3);
-    assert.strictEqual(team.score, 3);
-    
     team.addPoints(2);
-    assert.strictEqual(team.score, 5);
-  });
+    team.addRoundWin();
+    team.addRoundWin();
 
-  it('deve gerenciar vitórias de rodada corretamente', () => {
-    const team = new Team(1, 'Time 1');
-    
-    team.addRoundWin();
-    assert.strictEqual(team.roundsWon, 1);
-    
-    team.addRoundWin();
+    assert.strictEqual(team.players.length, 2);
+    assert.strictEqual(team.score, 5);
     assert.strictEqual(team.roundsWon, 2);
-    
     team.resetRoundWins();
     assert.strictEqual(team.roundsWon, 0);
   });
 });
 
-// Testes para a classe TrucoGame
-describe('TrucoGame', () => {
-  let game;
-
-  beforeEach(() => {
-    game = new TrucoGame('room1', 4);
-    game.addPlayer('player1', 'Jogador 1');
-    game.addPlayer('player2', 'Jogador 2');
-    game.addPlayer('player3', 'Jogador 3');
-    game.addPlayer('player4', 'Jogador 4');
-  });
-
-  const readyAllPlayers = (gameInstance) => {
-    gameInstance.players.forEach(p => gameInstance.setPlayerReady(p.id));
-  };
-
+describe('TrucoGame - sala e início', () => {
   it('deve inicializar o jogo corretamente', () => {
-    const newGame = new TrucoGame('room1', 2);
-    assert.strictEqual(newGame.roomId, 'room1');
-    assert.strictEqual(newGame.maxPlayers, 2);
-    assert.strictEqual(newGame.players.length, 0);
-    assert.strictEqual(newGame.teams.length, 2);
-    assert.strictEqual(newGame.gameStatus, 'waiting');
+    const game = new TrucoGame('room1', 2);
+    assert.strictEqual(game.roomId, 'room1');
+    assert.strictEqual(game.maxPlayers, 2);
+    assert.strictEqual(game.players.length, 0);
+    assert.strictEqual(game.teams.length, 2);
+    assert.strictEqual(game.gameStatus, 'waiting');
   });
 
-  it('deve adicionar jogadores corretamente', () => {
-    const newGame = new TrucoGame('room1', 2);
-    newGame.addPlayer('player1', 'Jogador 1');
-    assert.strictEqual(newGame.players.length, 1);
-    assert.strictEqual(newGame.players[0].id, 'player1');
-    assert.strictEqual(newGame.players[0].team, 1);
-    
-    newGame.addPlayer('player2', 'Jogador 2');
-    assert.strictEqual(newGame.players.length, 2);
-    assert.strictEqual(newGame.players[1].id, 'player2');
-    assert.strictEqual(newGame.players[1].team, 2);
+  it('deve alternar os jogadores entre os times', () => {
+    const game = new TrucoGame('room1', 4);
+    ['a', 'b', 'c', 'd'].forEach(id => game.addPlayer(id, id));
+    assert.deepStrictEqual(game.players.map(p => p.team), [1, 2, 1, 2]);
   });
 
-  it('deve iniciar o jogo quando todos os jogadores estiverem prontos', () => {
-    const newGame = new TrucoGame('room1', 2);
-    newGame.addPlayer('player1', 'Jogador 1');
-    newGame.addPlayer('player2', 'Jogador 2');
-    
-    assert.strictEqual(newGame.gameStatus, 'waiting');
-    
-    newGame.setPlayerReady('player1');
-    assert.strictEqual(newGame.gameStatus, 'waiting');
-
-    newGame.setPlayerReady('player2');
-    assert.strictEqual(newGame.gameStatus, 'playing');
+  it('deve rejeitar sala cheia, jogador repetido e entrada com a partida em andamento', () => {
+    const game = new TrucoGame('room1', 2);
+    game.addPlayer('a', 'A');
+    assert.strictEqual(game.addPlayer('a', 'A').success, false);
+    game.addPlayer('b', 'B');
+    assert.strictEqual(game.addPlayer('c', 'C').message, 'Sala cheia');
   });
 
-  it('deve distribuir cartas para os jogadores ao iniciar o jogo', () => {
-    readyAllPlayers(game);
-    game.players.forEach(player => {
-      assert.strictEqual(player.hand.length, 3);
-    });
+  it('só deve iniciar com a sala completa e todos prontos', () => {
+    const game = new TrucoGame('room1', 4);
+    game.addPlayer('a', 'A');
+    game.addPlayer('b', 'B');
+    game.setPlayerReady('a');
+    game.setPlayerReady('b');
+    assert.strictEqual(game.gameStatus, 'waiting', 'sala de 4 não pode começar com 2 jogadores');
+
+    game.addPlayer('c', 'C');
+    game.addPlayer('d', 'D');
+    game.setPlayerReady('c');
+    assert.strictEqual(game.gameStatus, 'waiting');
+    game.setPlayerReady('d');
+    assert.strictEqual(game.gameStatus, 'playing');
+    game.players.forEach(p => assert.strictEqual(p.hand.length, 3));
   });
 
-  it('deve permitir jogar cartas', () => {
-    readyAllPlayers(game);
-    game.currentTurn = 0;
-    game.players[0].isCurrentPlayer = true;
-    
-    const cardToPlay = game.players[0].hand[0];
-    const result = game.playCard('player1', cardToPlay);
+  it('não deve aceitar novos jogadores depois que a partida começou', () => {
+    const game = createStartedGame(2);
+    game.maxPlayers = 4;
+    assert.strictEqual(game.addPlayer('novo', 'Novo').success, false);
+  });
 
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(game.playedCards.length, 1);
+  it('deve manter os times equilibrados quando alguém sai da sala de espera', () => {
+    const game = new TrucoGame('room1', 4);
+    ['a', 'b', 'c'].forEach(id => game.addPlayer(id, id));
+    game.removePlayer('b');
+    game.addPlayer('d', 'd');
+
+    assert.deepStrictEqual(game.players.map(p => p.team), [1, 2, 1]);
+    assert.strictEqual(game.teams[0].players.length, 2);
+    assert.strictEqual(game.teams[1].players.length, 1);
+  });
+});
+
+describe('TrucoGame - jogar cartas', () => {
+  it('deve permitir jogar apenas na vez e apenas cartas da própria mão', () => {
+    const game = createStartedGame(2);
+    const p2Card = game.players[1].hand[0];
+
+    assert.strictEqual(play(game, 'p2', p2Card.value, p2Card.suit).message, 'Não é sua vez de jogar');
+
+    const p1Card = game.players[0].hand[0];
+    assert.strictEqual(play(game, 'p1', p1Card.value, p1Card.suit).success, true);
     assert.strictEqual(game.players[0].hand.length, 2);
+    assert.strictEqual(game.playedCards.length, 1);
+
+    assert.strictEqual(game.playCard('p2', { value: 'x', suit: 'y' }).message, 'Carta inválida');
+    assert.strictEqual(game.playCard('p2', null).message, 'Carta inválida');
   });
 
-  it('deve determinar o vencedor da rodada corretamente', function(done) {
-    this.timeout(3500); // Aumentar timeout para testes com setTimeout
-    readyAllPlayers(game);
+  it('deve determinar o vencedor da rodada no 2x2', () => {
+    const game = createStartedGame(4);
+    game.players[0].hand = [C('3', 'ouros')];
+    game.players[1].hand = [C('2', 'paus')];
+    game.players[2].hand = [C('4', 'paus')];
+    game.players[3].hand = [C('5', 'paus')];
 
-    const card1 = new Card('3', 'ouros');
-    const card2 = new Card('2', 'paus');
-    const card3 = new Card('4', 'paus');
-    const card4 = new Card('5', 'paus');
-
-    game.players[0].hand = [card1];
-    game.players[1].hand = [card2];
-    game.players[2].hand = [card3];
-    game.players[3].hand = [card4];
-
-    game.currentTurn = 0;
-    game.playCard('player1', card1);
-    game.playCard('player2', card2);
-    game.playCard('player3', card3);
-    game.playCard('player4', card4);
+    play(game, 'p1', '3', 'ouros');
+    play(game, 'p2', '2', 'paus');
+    play(game, 'p3', '4', 'paus');
+    play(game, 'p4', '5', 'paus');
 
     assert.strictEqual(game.teams[0].roundsWon, 1);
     assert.strictEqual(game.teams[1].roundsWon, 0);
-    done();
+  });
+});
+
+describe('TrucoGame - removePlayer', () => {
+  const build = (n, turn) => {
+    const game = new TrucoGame('room1', n);
+    for (let i = 1; i <= n; i++) game.addPlayer(`player${i}`, `Jogador ${i}`);
+    game.gameStatus = 'playing';
+    game.currentTurn = turn;
+    return game;
+  };
+
+  it('deve ajustar o turno quando um jogador anterior ao atual é removido', () => {
+    const game = build(4, 2);
+    game.removePlayer('player1');
+    assert.strictEqual(game.currentTurn, 1);
+    assert.strictEqual(game.players[game.currentTurn].id, 'player3');
   });
 
-  it('deve permitir pedir Truco', () => {
-    readyAllPlayers(game);
-    game.players[0].isCurrentPlayer = true;
-    const result = game.requestTruco('player1');
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(game.trucoState.level, 'truco');
+  it('deve manter o turno quando um jogador posterior ao atual é removido', () => {
+    const game = build(4, 0);
+    game.removePlayer('player3');
+    assert.strictEqual(game.currentTurn, 0);
+    assert.strictEqual(game.players[game.currentTurn].id, 'player1');
   });
 
-  it('deve permitir responder ao Truco', () => {
-    readyAllPlayers(game);
-    game.requestTruco('player1');
-    const result = game.respondToTruco('player2', true);
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(result.accepted, true);
-    assert.strictEqual(game.handValue, 2);
+  it('deve voltar o turno para 0 se o último jogador da lista era o da vez', () => {
+    const game = build(3, 2);
+    game.removePlayer('player3');
+    assert.strictEqual(game.currentTurn, 0);
   });
 
-  it('deve permitir pedir Envido', () => {
-    readyAllPlayers(game);
-    game.players[0].isCurrentPlayer = true;
-    const result = game.requestEnvido('player1');
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(game.envidoState.level, 'envido');
+  it('quem sai de uma partida em andamento perde por W.O.', () => {
+    const game = createStartedGame(2);
+    game.removePlayer('p1');
+    assert.strictEqual(game.gameStatus, 'finished');
+    assert.strictEqual(game.gameWinner.id, 2);
   });
 
-  it('deve permitir responder ao Envido', () => {
-    readyAllPlayers(game);
-    game.players[0].hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'paus')
-    ]; // Envido = 33
-    
-    game.players[1].hand = [
-      new Card('3', 'paus'),
-      new Card('2', 'paus'),
-      new Card('1', 'ouros')
-    ]; // Envido = 25
-    
-    game.players[0].isCurrentPlayer = true;
-    game.requestEnvido('player1');
-    
-    const result = game.respondToEnvido('player2', true);
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(result.winningTeam, 1);
-    assert.strictEqual(game.teams[0].score, 2);
+  it('deve sinalizar sala vazia e reiniciar o estado', () => {
+    const game = createStartedGame(2);
+    game.teams[0].score = 5;
+    game.removePlayer('p1');
+    const result = game.removePlayer('p2');
+    assert.strictEqual(result.roomEmpty, true);
+    assert.strictEqual(game.teams[0].score, 0);
+    assert.strictEqual(game.gameStatus, 'waiting');
   });
+});
 
-  it('deve permitir declarar Flor', () => {
-    readyAllPlayers(game);
-    game.players[0].hand = [
-      new Card('7', 'ouros'),
-      new Card('6', 'ouros'),
-      new Card('1', 'ouros')
-    ];
-    
-    const result = game.declareFlor('player1');
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(game.florState.level, 'flor');
-  });
-
-  it('deve terminar o jogo quando um time atingir a pontuação alvo', function(done) {
-    this.timeout(4000);
-    readyAllPlayers(game);
+describe('TrucoGame - fim de jogo e revanche', () => {
+  it('deve terminar o jogo quando um time atingir a pontuação alvo', () => {
+    const game = createStartedGame(2);
     game.targetScore = 5;
-    
     game.teams[0].addPoints(5);
-    
     game.endHand(game.teams[0]);
-    
-    setTimeout(() => {
-      assert.strictEqual(game.gameWinner, game.teams[0]);
-      assert.strictEqual(game.gameStatus, 'finished');
-      done();
-    }, 3500);
+
+    assert.strictEqual(game.gameWinner, game.teams[0]);
+    assert.strictEqual(game.gameStatus, 'finished');
   });
 
-  describe('removePlayer', () => {
-    it('deve ajustar o turno corretamente quando um jogador anterior ao atual é removido', () => {
-      const game = new TrucoGame('room1', 4);
-      game.addPlayer('player1', 'Jogador 1');
-      game.addPlayer('player2', 'Jogador 2');
-      game.addPlayer('player3', 'Jogador 3');
-      game.addPlayer('player4', 'Jogador 4');
+  it('deve reiniciar a partida quando todos votam por jogar novamente', () => {
+    const game = createStartedGame(2);
+    game.awardPoints(game.teams[0], 12);
+    assert.strictEqual(game.gameStatus, 'finished');
 
-      game.gameStatus = 'playing';
-      game.currentTurn = 2; // Vez do Jogador 3
+    assert.strictEqual(game.voteRematch('p1').restarted, false);
+    assert.strictEqual(game.voteRematch('p2').restarted, true);
 
-      game.removePlayer('player1'); // Remove o Jogador 1
+    assert.strictEqual(game.gameStatus, 'waiting');
+    assert.strictEqual(game.gameWinner, null);
+    assert.deepStrictEqual(game.teams.map(t => t.score), [0, 0]);
+    game.players.forEach(p => assert.strictEqual(p.isReady, false));
 
-      assert.strictEqual(game.players.length, 3);
-      assert.strictEqual(game.currentTurn, 1, 'O turno deveria ter sido ajustado para 1');
-      assert.strictEqual(game.players[game.currentTurn].id, 'player3');
-    });
-
-    it('deve passar o turno para o próximo jogador quando o jogador atual é removido', () => {
-      const game = new TrucoGame('room1', 4);
-      game.addPlayer('player1', 'Jogador 1');
-      game.addPlayer('player2', 'Jogador 2');
-      game.addPlayer('player3', 'Jogador 3');
-      game.addPlayer('player4', 'Jogador 4');
-
-      game.gameStatus = 'playing';
-      game.currentTurn = 1; // Vez do Jogador 2
-
-      game.removePlayer('player2'); // Remove o Jogador 2
-
-      assert.strictEqual(game.players.length, 3);
-      assert.strictEqual(game.currentTurn, 1, 'O turno deveria ter sido passado para o próximo jogador');
-      assert.strictEqual(game.players[game.currentTurn].id, 'player3');
-    });
-
-    it('deve manter o turno quando um jogador posterior ao atual é removido', () => {
-      const game = new TrucoGame('room1', 4);
-      game.addPlayer('player1', 'Jogador 1');
-      game.addPlayer('player2', 'Jogador 2');
-      game.addPlayer('player3', 'Jogador 3');
-      game.addPlayer('player4', 'Jogador 4');
-
-      game.gameStatus = 'playing';
-      game.currentTurn = 0; // Vez do Jogador 1
-
-      game.removePlayer('player3'); // Remove o Jogador 3
-
-      assert.strictEqual(game.players.length, 3);
-      assert.strictEqual(game.currentTurn, 0, 'O turno não deveria ter mudado');
-      assert.strictEqual(game.players[game.currentTurn].id, 'player1');
-    });
-
-    it('deve ajustar o turno para 0 se o último jogador da lista é removido e era a sua vez', () => {
-      const game = new TrucoGame('room1', 3);
-      game.addPlayer('player1', 'Jogador 1');
-      game.addPlayer('player2', 'Jogador 2');
-      game.addPlayer('player3', 'Jogador 3');
-
-      game.gameStatus = 'playing';
-      game.currentTurn = 2; // Vez do Jogador 3
-
-      game.removePlayer('player3'); // Remove o Jogador 3
-
-      assert.strictEqual(game.players.length, 2);
-      assert.strictEqual(game.currentTurn, 0, 'O turno deveria voltar para o primeiro jogador');
-      assert.strictEqual(game.players[game.currentTurn].id, 'player1');
-    });
+    game.setPlayerReady('p1');
+    game.setPlayerReady('p2');
+    assert.strictEqual(game.gameStatus, 'playing');
   });
 
-  describe('Betting Flow', () => {
-    it('deve incluir as informações de time no estado do jogo', () => {
-      const newGame = new TrucoGame('room1', 4);
-      newGame.addPlayer('player1', 'Jogador 1');
-      newGame.addPlayer('player2', 'Jogador 2');
-      newGame.addPlayer('player3', 'Jogador 3');
-      newGame.addPlayer('player4', 'Jogador 4');
-
-      // Marcar todos como prontos para garantir que o estado do jogo esteja atualizado
-      newGame.setPlayerReady('player1');
-      newGame.setPlayerReady('player2');
-      newGame.setPlayerReady('player3');
-      newGame.setPlayerReady('player4');
-
-      const gameState = newGame.getGameState();
-
-      gameState.players.forEach((player, index) => {
-        const expectedTeam = (index % 2) + 1;
-        assert.strictEqual(player.team, expectedTeam, `Jogador ${player.id} deveria estar no time ${expectedTeam}`);
-      });
-    });
-
-    it('deve lidar corretamente com a sequência de truco -> retruco -> vale 4', () => {
-      const newGame = new TrucoGame('room1', 2);
-      newGame.addPlayer('player1', 'Jogador 1');
-      newGame.addPlayer('player2', 'Jogador 2');
-      newGame.setPlayerReady('player1');
-      newGame.setPlayerReady('player2');
-
-      // Player 1 pede truco
-      let trucoResult = newGame.requestTruco('player1');
-      assert.strictEqual(trucoResult.success, true, 'Falha ao pedir truco');
-      assert.strictEqual(newGame.trucoState.level, 'truco');
-      assert.strictEqual(newGame.trucoState.respondingTeam, 2, 'O time respondente do truco está incorreto');
-
-      // Player 2 pede retruco
-      let retrucoResult = newGame.requestRetruco('player2');
-      assert.strictEqual(retrucoResult.success, true, 'Falha ao pedir retruco');
-      assert.strictEqual(newGame.retrucoState.level, 'retruco');
-      assert.strictEqual(newGame.trucoState, null, 'O estado do truco não foi limpo');
-      assert.strictEqual(newGame.retrucoState.respondingTeam, 1, 'O time respondente do retruco está incorreto');
-
-      // Player 1 pede vale 4
-      let vale4Result = newGame.requestVale4('player1');
-      assert.strictEqual(vale4Result.success, true, 'Falha ao pedir vale 4');
-      assert.strictEqual(newGame.vale4State.level, 'vale4');
-      assert.strictEqual(newGame.retrucoState, null, 'O estado do retruco não foi limpo');
-      assert.strictEqual(newGame.vale4State.respondingTeam, 2, 'O time respondente do vale 4 está incorreto');
-
-      // Player 2 aceita vale 4
-      let responseResult = newGame.respondToVale4('player2', true);
-      assert.strictEqual(responseResult.success, true, 'Falha ao responder ao vale 4');
-      assert.strictEqual(newGame.handValue, 4, 'O valor da mão deveria ser 4');
-    });
+  it('só permite votar por revanche quando a partida terminou', () => {
+    const game = createStartedGame(2);
+    assert.strictEqual(game.voteRematch('p1').success, false);
   });
 });

@@ -501,6 +501,36 @@ const CardGuide = () => {
               <RuleItem>Flor vale 3 pontos.</RuleItem>
               <RuleItem>Contra-Flor vale 6 pontos.</RuleItem>
               <RuleItem>Contra-Flor e o Resto vale os pontos restantes para ganhar.</RuleItem>
+              <RuleItem>Só pode ser cantada antes de jogar a primeira carta.</RuleItem>
+            </RuleList>
+          </RuleSection>
+
+          <RuleSection>
+            <SectionTitle>Empates</SectionTitle>
+            <RuleList>
+              <RuleItem>Empatou a 1ª rodada: quem vencer a 2ª leva a mão.</RuleItem>
+              <RuleItem>Empatou a 2ª ou a 3ª: quem venceu a 1ª leva a mão.</RuleItem>
+              <RuleItem>Empataram as três: vence o time de quem foi &quot;mão&quot;.</RuleItem>
+              <RuleItem>Empate no Envido ou na Flor: vence o time do &quot;mão&quot;.</RuleItem>
+            </RuleList>
+          </RuleSection>
+
+          <RuleSection>
+            <SectionTitle>Mão de onze</SectionTitle>
+            <RuleList>
+              <RuleItem>O time com 11 pontos escolhe: jogar (a mão vale 3) ou correr (o adversário faz 1 ponto).</RuleItem>
+              <RuleItem>No 2x2 os parceiros veem as cartas um do outro antes de decidir.</RuleItem>
+              <RuleItem>Não há Truco, Envido nem Flor nessa mão.</RuleItem>
+              <RuleItem>Se os dois times têm 11 é mão de ferro: vale 1 e decide a partida.</RuleItem>
+            </RuleList>
+          </RuleSection>
+
+          <RuleSection>
+            <SectionTitle>Tempo de jogada</SectionTitle>
+            <RuleList>
+              <RuleItem>Cada jogada ou resposta tem tempo limitado (o relógio aparece no topo).</RuleItem>
+              <RuleItem>Estourou o tempo: joga a carta mais fraca ou recusa a aposta.</RuleItem>
+              <RuleItem>Estourar duas vezes seguidas conta como abandono (W.O.).</RuleItem>
             </RuleList>
           </RuleSection>
         </GuideContent>
@@ -509,4 +539,4 @@ const CardGuide = () => {
   );
 };
 
-export default CardGuide;
+export default React.memo(CardGuide);
